@@ -1,0 +1,19 @@
+random_seed: 42
+model:
+  validation_fraction: 0.2
+  decision_threshold: 0.5
+  max_tfidf_features: 20000
+campaign:
+  similarity_threshold: 0.75
+  burst_window_hours: 24
+  minimum_group_size: 3
+data:
+  canonical_columns:
+    - review_id
+    - user_id
+    - product_id
+    - text
+    - rating
+    - timestamp
+    - verified_purchase
+    - helpful_votes

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Ecommerce review trust and campaign detection demo">
+  <title>Northstar Trust Console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#scanner">NORTHSTAR <span>TRUST</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#scanner">Product &amp; Reviews</a>
+      <a href="#campaigns">Live Campaigns</a>
+      <a href="#deployment">Deployment</a>
+      <a href="#monitoring">Monitoring</a>
+      <a href="#versions">Versions</a>
+      <a href="#workflow">How it works</a>
+    </nav>
+    <span id="api-status" class="health-pill pending">API checking</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">ECOMMERCE TRUST INTELLIGENCE</p>
+        <h1>See how every review is scanned.</h1>
+        <p class="lede">Inspect language, behavior, timing, similarity, campaign context, and the exact model lineage behind every result.</p>
+      </div>
+      <div class="hero-metrics" aria-label="Live summary">
+        <div><strong id="hero-scans">0</strong><span>reviews scanned</span></div>
+        <div><strong id="hero-campaigns">0</strong><span>campaigns found</span></div>
+        <div><strong id="hero-latency">0 ms</strong><span>p95 latency</span></div>
+      </div>
+    </section>
+
+    <section id="scanner" class="section scanner-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">01 / REVIEW SCANNER</p><h2>Scan a review</h2></div>
+        <p>Risk signals support moderation. They are evidence, not proof of deception.</p>
+      </div>
+      <div class="scanner-grid">
+        <form id="review-form" class="panel review-form">
+          <label for="example">Load an example</label>
+          <select id="example">
+            <option value="genuine">Likely genuine review</option>
+            <option value="promotional">Obvious promotional review</option>
+            <option value="ai">Subtle AI-generated review</option>
+            <option value="positive-campaign">Coordinated positive campaign</option>
+            <option value="negative-campaign">Coordinated negative campaign</option>
+            <option value="legitimate-burst">Legitimate sale-burst example</option>
+          </select>
+          <label for="review-text">Review text</label>
+          <textarea id="review-text" required minlength="3" maxlength="20000"></textarea>
+          <div class="fields three">
+            <label>Product ID<input id="product-id" value="quietform-studio" maxlength="200"></label>
+            <label>User ID<input id="user-id" value="demo-customer" maxlength="200"></label>
+            <label>Language<input id="language" value="en" maxlength="20"></label>
+          </div>
+          <div class="fields four">
+            <label>Rating<select id="rating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label>
+            <label>Helpful votes<input id="helpful" type="number" value="0" min="0"></label>
+            <label>Timestamp<input id="timestamp" type="datetime-local"></label>
+            <label class="check"><input id="verified" type="checkbox"> Verified purchase</label>
+          </div>
+          <div class="button-row">
+            <button class="primary" type="submit">Scan review</button>
+            <button class="secondary" id="replay" type="button">Replay campaign</button>
+          </div>
+        </form>
+
+        <div class="panel scan-progress" aria-live="polite">
+          <div class="panel-title"><span>Live scan</span><span id="scan-time">READY</span></div>
+          <ol id="scan-steps">
+            <li>Validate input</li><li>Analyze language</li><li>Create NLP embedding</li>
+            <li>Load behavioral features</li><li>Search recent similar reviews</li>
+            <li>Calculate individual risk</li><li>Check campaign membership</li>
+            <li>Return evidence and versions</li>
+          </ol>
+        </div>
+
+        <aside id="result" class="panel result" aria-live="polite">
+          <div class="result-placeholder"><span class="status neutral">READY</span><h3>Trust analysis</h3><p>Choose an example or enter a review, then start the scan.</p></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="review-feed" class="section">
+      <div class="section-heading">
+        <div><p class="eyebrow">02 / AUDIT FEED</p><h2>Recently scanned</h2></div>
+        <label>Filter feed
+          <select id="feed-filter"><option value="all">All reviews</option><option value="needs">Needs review</option><option value="campaign">Campaign-associated</option><option value="verified">Verified</option><option value="unverified">Unverified</option><option value="positive">Positive rating</option><option value="negative">Negative rating</option></select>
+        </label>
+      </div>
+      <div id="review-list" class="card-grid"><p class="empty">No reviews scanned in this process yet.</p></div>
+    </section>
+
+    <section id="campaigns" class="section dark-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">03 / LIVE CAMPAIGNS</p><h2>Coordination evidence</h2></div>
+        <p>Only confirmed campaign evidence can activate a temporary, reversible soft limit.</p>
+      </div>
+      <div id="campaign-list" class="campaign-list"><p class="empty">Replay a campaign to populate this console.</p></div>
+    </section>
+
+    <section id="deployment" class="section">
+      <div class="section-heading"><div><p class="eyebrow">04 / DEPLOYMENT</p><h2>What is running</h2></div><p>Read-only service health and release identity.</p></div>
+      <div class="architecture" aria-label="Deployment flow">
+        <div>Browser</div><span>→</span><div>FastAPI<br><small>TensorRT ready</small></div><span>→</span><div>Kafka</div><span>→</span><div>Spark</div><span>→</span><div>Campaign detector</div>
+      </div>
+      <div id="service-grid" class="service-grid"><p class="empty">Loading service status…</p></div>
+      <div id="ops-links" class="external-links"></div>
+    </section>
+
+    <section id="monitoring" class="section accent-section">
+      <div class="section-heading"><div><p class="eyebrow">05 / MONITORING</p><h2>Live signals</h2></div><p id="monitor-updated">Waiting for metrics…</p></div>
+      <div id="metric-grid" class="metric-grid"></div>
+      <div class="bar-panels">
+        <div class="panel"><h3>Latency budget</h3><div id="latency-bars"></div></div>
+        <div class="panel"><h3>Drift signals</h3><div id="drift-bars"></div></div>
+      </div>
+    </section>
+
+    <section id="versions" class="section">
+      <div class="section-heading"><div><p class="eyebrow">06 / VERSION LINEAGE</p><h2>Trace every decision</h2></div><p>Code, data, model, schema, image, and deployment are recorded together.</p></div>
+      <div class="table-wrap"><table><thead><tr><th>Version type</th><th>Current value</th></tr></thead><tbody id="lineage-table"></tbody></table></div>
+    </section>
+
+    <section id="workflow" class="section workflow">
+      <div class="section-heading"><div><p class="eyebrow">07 / HOW IT WORKS</p><h2>From commit to monitoring</h2></div></div>
+      <ol class="release-flow">
+        <li><strong>Feature branch</strong><span>Small Conventional Commits</span></li>
+        <li><strong>Pull request</strong><span>Tests, lint, scans, review</span></li>
+        <li><strong>Immutable image</strong><span>Tagged with Git SHA</span></li>
+        <li><strong>Argo CD</strong><span>Staging and canary rollout</span></li>
+        <li><strong>Observe</strong><span>Prometheus, Grafana, Kibana, drift</span></li>
+        <li><strong>Improve safely</strong><span>Approved retraining or rollback</span></li>
+      </ol>
+      <pre><code>git switch -c feat/review-scanning-ui
+git add web src tests
+git commit -m "feat(ui): add live review scanning workflow"
+git push -u origin feat/review-scanning-ui
+gh pr create --fill</code></pre>
+    </section>
+  </main>
+  <footer>Northstar Market · Responsible review intelligence demo · Individual risk never auto-blocks a review.</footer>
+  <script src="/app.js"></script>
+</body>
+</html>

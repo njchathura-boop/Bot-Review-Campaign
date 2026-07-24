@@ -133,7 +133,7 @@ async function loadFeed() {
 }
 
 async function moderate(id, decision) {
-  await fetchJson(`/v1/moderation/campaigns/${encodeURIComponent(id)}/decision`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({decision, moderator: "demo-moderator", reason: "UI demonstration"})});
+    await fetchJson(`/v1/campaigns/${encodeURIComponent(id)}/decision`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({decision, moderator: "demo-moderator", reason: "UI demonstration"})});
   await loadCampaigns();
 }
 
@@ -156,7 +156,7 @@ async function loadCampaigns() {
 }
 
 async function loadOps() {
-  const data = await fetchJson("/v1/ops/summary"), root = $("#service-grid"); root.replaceChildren();
+  const data = await fetchJson("/v1/operations"), root = $("#service-grid"); root.replaceChildren();
   data.services.forEach((item) => {
     const card = element("article", "service-card"), head = element("div", "service-head");
     const state = item.status === "healthy" ? "safe" : item.status === "unavailable" ? "warn" : "neutral";
@@ -177,7 +177,7 @@ function renderBars(root, rows) {
 }
 
 async function loadMonitoring() {
-  const data = await fetchJson("/v1/monitoring/summary");
+  const data = await fetchJson("/v1/monitoring");
   $("#hero-scans").textContent = data.reviews_processed; $("#hero-campaigns").textContent = data.campaign_alerts; $("#hero-latency").textContent = `${data.latency_ms.p95} ms`;
   $("#monitor-updated").textContent = `Updated ${new Date(data.updated_at).toLocaleTimeString()}`;
   const metrics = [["Throughput", data.reviews_per_second, "/ sec"], ["API errors", data.api_error_rate, "%"], ["Kafka lag", data.kafka_consumer_lag, "events"], ["Campaigns", data.campaign_alerts, "alerts"], ["Soft limits", data.soft_limited_campaigns, "active"], ["Mean risk", Math.round(data.mean_review_risk * 100), "%"]];
@@ -188,7 +188,7 @@ async function loadMonitoring() {
 }
 
 async function loadLineage() {
-  const data = await fetchJson("/v1/lineage/current"), root = $("#lineage-table"); root.replaceChildren();
+  const data = await fetchJson("/v1/lineage"), root = $("#lineage-table"); root.replaceChildren();
   Object.entries(data).forEach(([key, value]) => { const row = element("tr"); row.append(element("th", "", key.replaceAll("_", " ")), element("td", "", value)); root.append(row); });
 }
 

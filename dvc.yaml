@@ -1,0 +1,25 @@
+stages:
+  generate_sample:
+    cmd: python -m bot_campaign.cli generate-synthetic --preset sample
+    deps:
+      - src/bot_campaign/synthetic.py
+    outs:
+      - data/processed/synthetic_sample.jsonl
+      - data/processed/synthetic_sample.jsonl.manifest.json
+
+  e2e_demo:
+    cmd: python -m bot_campaign.cli e2e-demo
+    deps:
+      - src/bot_campaign
+      - data/sample/labeled_reviews.jsonl
+      - data/sample/campaign_reviews.jsonl
+    outs:
+      - artifacts/e2e
+
+  generate_full:
+    cmd: python -m bot_campaign.cli generate-synthetic --preset full
+    deps:
+      - src/bot_campaign/synthetic.py
+    outs:
+      - data/processed/synthetic_campaigns_50k.jsonl
+      - data/processed/synthetic_campaigns_50k.jsonl.manifest.json

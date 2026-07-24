@@ -33,13 +33,28 @@ def main() -> None:
     merge = commands.add_parser("merge-labeled", help="Deduplicate canonical labeled datasets")
     merge.add_argument("inputs", nargs="+")
     merge.add_argument("--output", default="data/processed/training_labeled.jsonl")
+    training_set = commands.add_parser(
+        "build-training-set",
+        help="Combine real labels with a deterministic, capped synthetic subset",
+    )
+    training_set.add_argument("--real", nargs="+", required=True)
+    training_set.add_argument("--synthetic", required=True)
+    training_set.add_argument(
+        "--output", default="data/processed/training_labeled.jsonl"
+    )
+    training_set.add_argument("--max-synthetic-fraction", type=float, default=0.25)
+    training_set.add_argument("--seed", type=int, default=42)
     synthetic = commands.add_parser(
         "generate-synthetic", help="Create reproducible labeled campaign scenarios"
     )
-    synthetic.add_argument(
-        "--output", default="data/processed/synthetic_campaigns_50k.jsonl"
-    )
+    synthetic.add_argument("--preset", choices=("sample", "full"), default="sample")
+    synthetic.add_argument("--output")
     synthetic.add_argument("--seed", type=int, default=42)
+    e2e = commands.add_parser(
+        "e2e-demo", help="Generate, validate, train, and evaluate a small local workflow"
+    )
+    e2e.add_argument("--output-dir", default="artifacts/e2e")
+    e2e.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -78,10 +93,38 @@ def main() -> None:
         from .labeled_datasets import merge_labeled
 
         print(json.dumps(merge_labeled(args.inputs, args.output), indent=2))
+    elif args.command == "build-training-set":
+        from .labeled_datasets import build_training_set
+
+        print(
+            json.dumps(
+                build_training_set(
+                    args.real,
+                    args.synthetic,
+                    args.output,
+                    args.max_synthetic_fraction,
+                    args.seed,
+                ),
+                indent=2,
+            )
+        )
     elif args.command == "generate-synthetic":
         from .synthetic import generate_dataset
 
-        print(json.dumps(generate_dataset(args.output, args.seed), indent=2))
+        output = args.output or (
+            "data/processed/synthetic_sample.jsonl"
+            if args.preset == "sample"
+            else "data/processed/synthetic_campaigns_50k.jsonl"
+        )
+        print(
+            json.dumps(
+                generate_dataset(output, args.seed, preset=args.preset), indent=2
+            )
+        )
+    elif args.command == "e2e-demo":
+        from .workflow import run_e2e_demo
+
+        print(json.dumps(run_e2e_demo(args.output_dir, args.seed), indent=2))
 
 
 

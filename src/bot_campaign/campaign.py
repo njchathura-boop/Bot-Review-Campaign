@@ -47,7 +47,10 @@ def detect_campaigns(
         mean_similarity = float(np.mean(pairs)) if pairs else 0.0
         rating_consistency = 1.0 - min(float(np.std([r.rating for r in selected])) / 2.0, 1.0)
         score = min(1.0, 0.65 * mean_similarity + 0.2 * rating_consistency + 0.15 * min(len(selected) / 5, 1))
-        digest = hashlib.sha1("|".join(sorted(r.review_id for r in selected)).encode()).hexdigest()[:10]
+        anchor = min(r.review_id for r in selected)
+        digest = hashlib.sha1(
+            f"{selected[0].product_id}|{anchor}".encode()
+        ).hexdigest()[:10]
         alerts.append(
             CampaignAlert(
                 campaign_id=f"campaign-{digest}", product_id=selected[0].product_id,

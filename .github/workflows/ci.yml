@@ -40,6 +40,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'push' }}
+          load: ${{ github.event_name != 'push' }}
           tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
       - uses: aquasecurity/trivy-action@0.28.0
         with:

@@ -9,5 +9,5 @@ def test_ui_contains_scanner_operations_monitoring_and_lineage():
     assert "Scan review" in html
     assert "Replay campaign" in html
     assert "/v1/reviews/score" in javascript
-    assert "/v1/monitoring/summary" in javascript
+    assert "/v1/monitoring" in javascript
     assert "innerHTML" not in javascript

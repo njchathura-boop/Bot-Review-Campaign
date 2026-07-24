@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bot-campaign-detector"
-version = "0.1.0"
+version = "1.1.0"
 description = "Fake-review classification and coordinated campaign detection"
 requires-python = ">=3.11,<3.15"
 dependencies = [
@@ -23,6 +23,7 @@ mlops = ["dvc>=3.56,<4", "mlflow>=2.18,<4"]
 streaming = ["confluent-kafka>=2.6,<4", "datasets>=3,<5"]
 distributed = ["ray[default]>=2.40,<3", "mlflow>=3,<4"]
 synthetic = ["Faker>=40,<41"]
+ui = ["playwright>=1.50,<2"]
 
 [project.scripts]
 bot-campaign = "bot_campaign.cli:main"

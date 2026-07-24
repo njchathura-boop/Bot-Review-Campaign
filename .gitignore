@@ -10,6 +10,9 @@ pytest-cache-files-*/
 !.env.example
 artifacts/*.joblib
 artifacts/pytest-*/
+artifacts/e2e/
+artifacts/e2e-*/
+artifacts/test-*/
 *.egg-info/
 artifacts/**/*.onnx
 artifacts/**/*.engine

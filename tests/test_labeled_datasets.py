@@ -1,6 +1,11 @@
+import json
 from pathlib import Path
 
-from bot_campaign.labeled_datasets import canonical_maide, canonical_ott_file
+from bot_campaign.labeled_datasets import (
+    build_training_set,
+    canonical_maide,
+    canonical_ott_file,
+)
 
 
 def test_maide_source_one_maps_to_fake():
@@ -24,3 +29,33 @@ def test_ott_directory_structure_preserves_label_and_group():
     )
     assert deceptive["label"] == 1 and truthful["label"] == 0
     assert deceptive["group_id"] == truthful["group_id"] == "ott:hilton"
+
+
+def test_training_mix_caps_synthetic_rows():
+    synthetic = Path("data/processed/_test_mix_synthetic.jsonl")
+    output = Path("data/processed/_test_training_mix.jsonl")
+    try:
+        with synthetic.open("w", encoding="utf-8") as handle:
+            for index in range(20):
+                row = {
+                    "review_id": f"synthetic-{index}",
+                    "text": f"Unique generated review {index}",
+                    "synthetic": True,
+                    "split": "train",
+                }
+                handle.write(json.dumps(row) + "\n")
+        manifest = build_training_set(
+            ["data/sample/labeled_reviews.jsonl"],
+            synthetic,
+            output,
+            max_synthetic_fraction=0.25,
+        )
+        assert manifest["synthetic_fraction"] <= 0.25
+        assert manifest["real_records"] == 20
+    finally:
+        for path in (
+            synthetic,
+            output,
+            output.with_suffix(output.suffix + ".manifest.json"),
+        ):
+            path.unlink(missing_ok=True)

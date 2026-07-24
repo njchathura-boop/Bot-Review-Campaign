@@ -1,30 +1,22 @@
 from fastapi.testclient import TestClient
 
-from bot_campaign.api import app
+from bot_campaign.api import create_app
+from bot_campaign.config import Settings
+from bot_campaign.data import load_reviews
+from bot_campaign.model import ReviewScorer, train
+from bot_campaign.runtime import TrustRuntime
 
 
-client = TestClient(app)
+reviews, _ = load_reviews("data/sample/labeled_reviews.jsonl", labeled=True)
+bundle, _ = train(reviews, seed=42)
+test_runtime = TrustRuntime(Settings.from_env(), scorer=ReviewScorer(bundle))
+client = TestClient(create_app(runtime=test_runtime))
 
 
 def test_health_endpoint():
-    response = client.get("/health")
+    response = client.get("/health/live")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_campaign_endpoint():
-    reviews = [
-        {
-            "review_id": f"a{index}", "user_id": f"u{index}", "product_id": "p1",
-            "text": "Amazing sound quality and excellent battery life highly recommended",
-            "rating": 5, "timestamp": f"2025-01-01T10:0{index}:00Z",
-            "verified_purchase": False, "helpful_votes": 0,
-        }
-        for index in range(3)
-    ]
-    response = client.post("/detect_campaign", json={"reviews": reviews})
-    assert response.status_code == 200
-    assert len(response.json()) == 1
+    assert response.json()["status"] == "alive"
 
 
 def test_versioned_score_monitoring_and_lineage():
@@ -45,8 +37,8 @@ def test_versioned_score_monitoring_and_lineage():
     assert response.status_code == 200
     assert response.json()["api_schema_version"] == "reviews.scored.v1"
     assert client.get("/v1/reviews/versioned-1/trust").status_code == 200
-    assert client.get("/v1/lineage/predictions/versioned-1").status_code == 200
-    assert client.get("/v1/monitoring/summary").json()["reviews_processed"] >= 1
+    assert client.get("/v1/reviews/versioned-1/lineage").status_code == 200
+    assert client.get("/v1/monitoring").json()["reviews_processed"] >= 1
     assert "review_scans_total" in client.get("/metrics").text
 
 
@@ -56,3 +48,11 @@ def test_demo_replay_populates_campaign_console():
     assert response.json()["status"] == "completed"
     campaigns = client.get("/v1/campaigns").json()
     assert campaigns["count"] >= 1
+
+
+def test_operations_never_claim_unchecked_dependencies_are_healthy():
+    response = client.get("/v1/operations")
+    assert response.status_code == 200
+    services = response.json()["services"]
+    external = [item for item in services if item["name"] not in {"FastAPI", "Model"}]
+    assert all(item["status"] in {"configured", "not_configured"} for item in external)

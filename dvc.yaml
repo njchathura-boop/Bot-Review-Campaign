@@ -1,25 +1,54 @@
 stages:
-  generate_sample:
-    cmd: python -m bot_campaign.cli generate-synthetic --preset sample
+  build_temporal_bundle:
+    cmd: >-
+      python -m bot_campaign.cli build-temporal-bundle
+      --behavioral-input data/raw/amazon_all_beauty_sample.jsonl
+      --output-dir data/processed/temporal_bundle
+      --campaign-scenario-count 2000
+      --seed 42
     deps:
-      - src/bot_campaign/synthetic.py
+      - data/raw/amazon_all_beauty_sample.jsonl
+      - src/bot_campaign/cli.py
+      - src/bot_campaign/data.py
+      - src/bot_campaign/dataset_bundle.py
+      - src/bot_campaign/temporal.py
     outs:
-      - data/processed/synthetic_sample.jsonl
-      - data/processed/synthetic_sample.jsonl.manifest.json
+      - data/processed/temporal_bundle
 
-  e2e_demo:
-    cmd: python -m bot_campaign.cli e2e-demo
+  build_dataset_bundle:
+    cmd: >-
+      python -m bot_campaign.cli build-dataset-bundle
+      --labeled-input data/raw/product_reviews.jsonl data/raw/kaggle_fake_reviews
+      --behavioral-input data/raw/amazon_all_beauty_sample.jsonl
+      --output-dir data/processed/dataset_bundle
+      --augmentation-count 7000
+      --campaign-scenario-count 2000
+      --max-synthetic-fraction 0.25
+      --seed 42
     deps:
-      - src/bot_campaign
-      - data/sample/labeled_reviews.jsonl
-      - data/sample/campaign_reviews.jsonl
-    outs:
-      - artifacts/e2e
-
-  generate_full:
-    cmd: python -m bot_campaign.cli generate-synthetic --preset full
-    deps:
+      - data/raw/product_reviews.jsonl
+      - data/raw/kaggle_fake_reviews/fake reviews dataset.csv
+      - data/raw/amazon_all_beauty_sample.jsonl
+      - src/bot_campaign/data.py
+      - src/bot_campaign/dataset_bundle.py
+      - src/bot_campaign/labeled_datasets.py
       - src/bot_campaign/synthetic.py
+      - src/bot_campaign/temporal.py
     outs:
-      - data/processed/synthetic_campaigns_50k.jsonl
-      - data/processed/synthetic_campaigns_50k.jsonl.manifest.json
+      - data/processed/dataset_bundle
+
+  train_product_model:
+    cmd: >-
+      python -m bot_campaign.cli train
+      --data data/processed/dataset_bundle/text/training.jsonl
+      --test-data data/processed/dataset_bundle/text/real/test.jsonl
+      --baseline-data data/processed/dataset_bundle/text/real/train.jsonl
+      --min-pr-auc-lift 0.05
+    deps:
+      - data/processed/dataset_bundle/text/training.jsonl
+      - data/processed/dataset_bundle/text/real/test.jsonl
+      - data/processed/dataset_bundle/text/real/train.jsonl
+      - src/bot_campaign/model.py
+    outs:
+      - artifacts/review_model.joblib
+      - reports/generated/baseline_metrics.json

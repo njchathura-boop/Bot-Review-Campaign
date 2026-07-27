@@ -11,11 +11,11 @@ RUN addgroup --system app && adduser --system --ingroup app app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY web ./web
-COPY data/sample ./data/sample
-RUN python -m pip install . && \
-    python -m bot_campaign.cli train \
-      --data data/sample/labeled_reviews.jsonl \
-      --output artifacts/review_model.joblib && \
+RUN python -m pip install \
+      --index-url https://download.pytorch.org/whl/cpu \
+      "torch>=2.4,<3" && \
+    python -m pip install ".[nlp]" && \
+    mkdir -p artifacts && \
     chown -R app:app /app
 
 USER app

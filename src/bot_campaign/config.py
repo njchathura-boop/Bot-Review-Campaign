@@ -17,6 +17,8 @@ class Settings:
     app_version: str
     environment: str
     model_path: Path
+    review_transformer_path: Path
+    campaign_model_path: Path
     web_dir: Path
     dataset_version: str
     feature_version: str
@@ -38,6 +40,18 @@ class Settings:
                 os.getenv(
                     "MODEL_PATH",
                     str(PROJECT_ROOT / "artifacts" / "review_model.joblib"),
+                )
+            ),
+            review_transformer_path=Path(
+                os.getenv(
+                    "REVIEW_TRANSFORMER_PATH",
+                    str(PROJECT_ROOT / "artifacts" / "review_distilbert"),
+                )
+            ),
+            campaign_model_path=Path(
+                os.getenv(
+                    "CAMPAIGN_MODEL_PATH",
+                    str(PROJECT_ROOT / "artifacts" / "campaign_model"),
                 )
             ),
             web_dir=Path(os.getenv("WEB_DIR", str(PROJECT_ROOT / "web"))),

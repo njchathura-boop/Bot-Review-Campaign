@@ -18,12 +18,17 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -e ".[dev,synthetic,ui]"
+      - run: python -m pip install -e ".[dev,ui]"
       - run: python -m playwright install --with-deps chromium
-      - run: python -m bot_campaign.cli train
-      - run: ruff check src tests
+      - run: >-
+          python -m bot_campaign.cli train
+          --data data/sample/labeled_reviews.jsonl
+          --test-data ""
+          --baseline-data ""
+      - name: Validate orchestration DAG source
+        run: python -m compileall -q orchestration/dags
+      - run: ruff check src tests training streaming spark
       - run: pytest -q -p no:cacheprovider
-      - run: python -m bot_campaign.cli e2e-demo --output-dir /tmp/e2e
 
   container:
     needs: quality

@@ -3,12 +3,13 @@ from __future__ import annotations
 import csv
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TypeVar
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from .schemas import LabeledReview, Review
+from .schemas import Review, TextLabeledReview
 
 
 @dataclass
@@ -19,53 +20,83 @@ class ValidationReport:
     errors: list[dict[str, str]] = field(default_factory=list)
 
 
-ALIASES = {
+EVENT_ALIASES = {
     "review_id": ("review_id", "id"),
     "user_id": ("user_id", "user", "reviewerID"),
-    "product_id": ("product_id", "parent_asin", "asin", "item_id"),
+    "product_id": ("product_id", "parent_asin", "asin", "item_id", "business_id"),
     "text": ("text", "review_text", "reviewText", "content"),
     "rating": ("rating", "overall", "stars"),
     "timestamp": ("timestamp", "time", "unixReviewTime", "date"),
     "verified_purchase": ("verified_purchase", "verified", "verifiedPurchase"),
-    "helpful_votes": ("helpful_votes", "helpful_vote", "helpful"),
-    "label": ("label", "fake", "is_fake"),
-    "source": ("source", "dataset"),
-    "group_id": ("group_id", "hotel_id", "author_group"),
+    "helpful_votes": ("helpful_votes", "helpful_vote", "helpful", "useful"),
+    "category": ("category", "product_category"),
+}
+
+TEXT_ALIASES = {
+    "review_id": ("review_id", "id"),
+    "text": ("text", "text_", "review_text", "reviewText", "content"),
+    "label": ("label", "is_deceptive", "fake", "is_fake", "is_fake_review"),
+    "category": ("category", "product_category"),
+    "rating": ("rating", "overall", "stars", "star_rating"),
 }
 
 
-def _pick(row: dict, canonical: str, default=None):
-    for name in ALIASES[canonical]:
+def _pick(row: dict, aliases: dict[str, tuple[str, ...]], canonical: str, default=None):
+    for name in aliases[canonical]:
         if name in row and row[name] not in (None, ""):
             return row[name]
     return default
 
 
-def canonicalize(row: dict, labeled: bool = False) -> dict:
-    timestamp = _pick(row, "timestamp")
-    if isinstance(timestamp, (int, float)) or (isinstance(timestamp, str) and timestamp.isdigit()):
-        timestamp = int(timestamp)
-        timestamp = timestamp / 1000 if timestamp > 10_000_000_000 else timestamp
-        from datetime import datetime, timezone
+def normalize_timestamp(value: object) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)) or (isinstance(value, str) and value.strip().isdigit()):
+        numeric = int(value)
+        numeric = numeric / 1000 if numeric > 10_000_000_000 else numeric
+        parsed = datetime.fromtimestamp(numeric, tz=timezone.utc)
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        raise ValueError(f"Unsupported timestamp: {value!r}")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
-        timestamp = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    result = {
-        "review_id": str(_pick(row, "review_id", "")),
-        "user_id": str(_pick(row, "user_id", "")),
-        "product_id": str(_pick(row, "product_id", "")),
-        "text": _pick(row, "text", ""),
-        "rating": _pick(row, "rating"),
-        "timestamp": timestamp,
-        "verified_purchase": _pick(row, "verified_purchase", False),
-        "helpful_votes": _pick(row, "helpful_votes", 0),
+
+def canonicalize_review_event(row: dict) -> dict:
+    launch_time = row.get("launch_time")
+    return {
+        "review_id": str(_pick(row, EVENT_ALIASES, "review_id", "")),
+        "user_id": str(_pick(row, EVENT_ALIASES, "user_id", "")),
+        "product_id": str(_pick(row, EVENT_ALIASES, "product_id", "")),
+        "text": _pick(row, EVENT_ALIASES, "text", ""),
+        "rating": _pick(row, EVENT_ALIASES, "rating"),
+        "timestamp": normalize_timestamp(_pick(row, EVENT_ALIASES, "timestamp")),
+        "verified_purchase": _pick(row, EVENT_ALIASES, "verified_purchase", False),
+        "helpful_votes": _pick(row, EVENT_ALIASES, "helpful_votes", 0),
+        "category": str(_pick(row, EVENT_ALIASES, "category", "general_merchandise")),
+        "source": str(row.get("source", "platform")),
+        "metadata_provenance": row.get("metadata_provenance", {}),
+        "launch_time": normalize_timestamp(launch_time) if launch_time else None,
+        "launch_time_provenance": row.get("launch_time_provenance"),
     }
-    if labeled:
-        result.update(
-            label=_pick(row, "label"),
-            source=str(_pick(row, "source", "unknown")),
-            group_id=_pick(row, "group_id"),
-        )
-    return result
+
+
+def canonicalize_text_label(row: dict) -> dict:
+    return {
+        "review_id": str(_pick(row, TEXT_ALIASES, "review_id", "")),
+        "text": _pick(row, TEXT_ALIASES, "text", ""),
+        "label": _pick(row, TEXT_ALIASES, "label"),
+        "category": _pick(row, TEXT_ALIASES, "category"),
+        "rating": _pick(row, TEXT_ALIASES, "rating"),
+        "source": str(row.get("source", "unknown")),
+        "group_id": row.get("group_id"),
+        "label_provenance": str(row.get("label_provenance", "observed_source_label")),
+        "field_provenance": row.get("field_provenance", {}),
+        "synthetic": bool(row.get("synthetic", False)),
+        "split": row.get("split"),
+    }
 
 
 def read_records(path: str | Path) -> Iterable[dict]:
@@ -86,22 +117,34 @@ def read_records(path: str | Path) -> Iterable[dict]:
         raise ValueError(f"Unsupported data format: {path.suffix}; use CSV, JSON, or JSONL")
 
 
-def load_reviews(path: str | Path, labeled: bool = False):
-    model = LabeledReview if labeled else Review
+ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+def _load(
+    path: str | Path, model: type[ModelT], canonicalizer
+) -> tuple[list[ModelT], ValidationReport]:
     report = ValidationReport()
-    reviews, seen = [], set()
+    records: list[ModelT] = []
+    seen: set[str] = set()
     for index, row in enumerate(read_records(path), start=1):
         try:
-            review = model.model_validate(canonicalize(row, labeled=labeled))
-            if review.review_id in seen:
+            record = model.model_validate(canonicalizer(row))
+            if record.review_id in seen:
                 report.duplicate_ids += 1
                 report.rejected += 1
                 continue
-            seen.add(review.review_id)
-            reviews.append(review)
+            seen.add(record.review_id)
+            records.append(record)
             report.accepted += 1
         except (ValidationError, ValueError, TypeError) as exc:
             report.rejected += 1
             report.errors.append({"row": str(index), "error": str(exc)[:500]})
-    return reviews, report
+    return records, report
 
+
+def load_review_events(path: str | Path) -> tuple[list[Review], ValidationReport]:
+    return _load(path, Review, canonicalize_review_event)
+
+
+def load_text_labels(path: str | Path) -> tuple[list[TextLabeledReview], ValidationReport]:
+    return _load(path, TextLabeledReview, canonicalize_text_label)

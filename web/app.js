@@ -5,6 +5,7 @@ const examples = {
   ai: {text: "These headphones present a compelling blend of refined acoustic performance and thoughtful ergonomic design, making every listening session consistently enjoyable.", rating: 5, verified: false, product: "quietform-studio"},
   "positive-campaign": {text: "Outstanding battery life and premium quality, highly recommended for everyone!", rating: 5, verified: false, product: "demo-smartwatch"},
   "negative-campaign": {text: "Battery failed immediately and support was completely useless, avoid this product!", rating: 1, verified: false, product: "demo-competitor-watch"},
+  "cross-product-campaign": {text: "Exceptional results and flawless operation make this an essential purchase!", rating: 5, verified: false, product: "demo-cross-product-1"},
   "legitimate-burst": {text: "Bought during the launch sale. Delivery took two days and the advertised battery life matches my first week of use.", rating: 4, verified: true, product: "launch-day-speaker"}
 };
 let feed = [];
@@ -92,7 +93,8 @@ async function scanReview(event) {
 
 async function replayCampaign() {
   const button = $("#replay"); button.disabled = true; button.textContent = "Replaying…";
-  const scenario = $("#example").value.includes("negative") ? "coordinated-negative" : "coordinated-positive";
+  const selected = $("#example").value;
+  const scenario = selected.includes("cross") ? "coordinated-cross-product" : selected.includes("negative") ? "coordinated-negative" : "coordinated-positive";
   try {
     await fetchJson("/v1/demo/replay", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({scenario})});
     await refreshAll(); location.hash = "campaigns";

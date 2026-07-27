@@ -1,0 +1,3 @@
+services:
+  ray-worker:
+    gpus: all

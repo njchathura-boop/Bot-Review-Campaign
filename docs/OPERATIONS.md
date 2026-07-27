@@ -3,7 +3,7 @@
 ## Local demo
 
 ```powershell
-python -m pip install -e ".[dev,synthetic]"
+python -m pip install -e ".[dev]"
 python -m bot_campaign.cli train
 python -m uvicorn bot_campaign.api:app --reload
 ```
@@ -25,15 +25,56 @@ MLflow is available at `http://localhost:5001` only when its service is started.
 ## Generate the controlled dataset
 
 ```powershell
-python -m bot_campaign.cli e2e-demo
-python -m bot_campaign.cli generate-synthetic --preset full
-python -m bot_campaign.cli validate data/processed/synthetic_campaigns_50k.jsonl --labeled
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  ".\scripts\download_amazon_categories.ps1" `
+  -Limit 25000 `
+  -BuildTemporalBundle `
+  -CampaignScenarioCount 0 `
+  -BundleOutputDirectory "data/processed/temporal_bundle"
 ```
 
 The JSONL and manifest are ignored by Git. Commit only the generator, tests, and DVC
 metadata. The generator is deterministic and offline. Any later LLM-generated variant
 must use a pinned model revision, be saved as a distinct dataset version, and pass human
 review before training.
+
+## Train and stream the campaign model
+
+Use Python 3.11. Begin with the bounded CPU smoke path; a smoke result verifies wiring
+but is not promotable:
+
+```powershell
+python -m pip install -e ".[campaign-training,streaming]"
+docker compose up -d mlflow
+python training/ray_train.py --smoke --gpus-per-trial 0
+```
+
+After full GPU training and acceptance checks, stream with:
+
+```powershell
+docker compose up -d kafka spark-master spark-worker
+docker compose --profile stream up -d spark-stream
+docker compose --profile score up -d campaign-scorer
+python streaming/producer.py `
+  --input data/processed/temporal_bundle/campaign_v3/test.jsonl `
+  --rate 100
+```
+
+Inspect service health and logs:
+
+```powershell
+docker compose ps
+docker compose logs --tail 100 spark-stream campaign-scorer
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh `
+  --bootstrap-server kafka:29092 `
+  --describe `
+  --group campaign-scorer-v1
+```
+
+MLflow is at `http://localhost:5001`, Ray at `http://localhost:8265`, Spark at
+`http://localhost:8082`, Prometheus at `http://localhost:9090`, and Grafana at
+`http://localhost:3000`. Spark validation uses the Compose image's pinned Java 17
+runtime rather than the host's Java 26 runtime.
 
 ## Git workflow
 

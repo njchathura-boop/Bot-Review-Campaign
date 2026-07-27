@@ -9,6 +9,9 @@ pytest-cache-files-*/
 .env.*
 !.env.example
 artifacts/*.joblib
+artifacts/campaign_model/
+artifacts/review_distilbert/
+artifacts/ray_results/
 artifacts/pytest-*/
 artifacts/e2e/
 artifacts/e2e-*/
@@ -16,6 +19,7 @@ artifacts/test-*/
 *.egg-info/
 artifacts/**/*.onnx
 artifacts/**/*.engine
+artifacts/**/*.pt
 data/raw/*
 data/processed/*
 data/features/*

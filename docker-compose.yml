@@ -1,5 +1,16 @@
 name: bot-campaign
 
+x-ray-runtime: &ray-runtime
+  image: bot-campaign-ray:local
+  build:
+    context: .
+    dockerfile: docker/ray.Dockerfile
+  shm_size: 2gb
+  volumes:
+    - ./:/opt/project
+  environment:
+    PYTHONPATH: /opt/project/src
+
 services:
   api:
     build:
@@ -10,8 +21,15 @@ services:
     environment:
       APP_ENV: compose
       GRAFANA_URL: http://localhost:3000
+      MLFLOW_URL: http://localhost:5001
       GIT_COMMIT: ${GIT_COMMIT:-local-compose}
       IMAGE_DIGEST: ${IMAGE_DIGEST:-bot-campaign:local}
+      WEB_DIR: /app/web
+      REVIEW_TRANSFORMER_PATH: /models/review_distilbert
+      CAMPAIGN_MODEL_PATH: /models/campaign_model
+    volumes:
+      - ./artifacts/review_distilbert:/models/review_distilbert:ro
+      - ./artifacts/campaign_model:/models/campaign_model:ro
 
   kafka:
     image: apache/kafka:4.1.0
@@ -96,7 +114,8 @@ services:
       - "5000"
       - --backend-store-uri
       - sqlite:////mlflow/mlflow.db
-      - --default-artifact-root
+      - --serve-artifacts
+      - --artifacts-destination
       - /mlflow/artifacts
     ports:
       - "5001:5000"
@@ -130,44 +149,114 @@ services:
       - prometheus
 
   ray-head:
-    build:
-      context: .
-      dockerfile: docker/ray.Dockerfile
+    <<: *ray-runtime
     command: ["ray", "start", "--head", "--port=6379", "--dashboard-host=0.0.0.0", "--block"]
     ports:
       - "8265:8265"
       - "6379:6379"
-    shm_size: 2gb
+    healthcheck:
+      test: ["CMD-SHELL", "ray status --address=127.0.0.1:6379"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
 
   ray-worker:
-    build:
-      context: .
-      dockerfile: docker/ray.Dockerfile
+    <<: *ray-runtime
     command: ["ray", "start", "--address=ray-head:6379", "--block"]
     depends_on:
-      - ray-head
-    shm_size: 2gb
+      ray-head:
+        condition: service_healthy
 
   ray-trainer:
-    build:
-      context: .
-      dockerfile: docker/ray.Dockerfile
+    <<: *ray-runtime
     profiles: ["train"]
     command:
+      - ray
+      - job
+      - submit
+      - --address
+      - http://ray-head:8265
+      - --
       - python
-      - training/ray_train.py
+      - /opt/project/training/ray_train.py
       - --ray-address
-      - ray://ray-head:10001
+      - auto
       - --mlflow-uri
       - http://mlflow:5000
-      - --data
-      - data/processed/maide_labeled.jsonl
-    volumes:
-      - ./:/opt/project
+      - --ray-storage-path
+      - /opt/project/artifacts/ray_results
+      - --train-data
+      - /opt/project/data/processed/temporal_bundle/campaign_v3/train.jsonl
+      - --validation-data
+      - /opt/project/data/processed/temporal_bundle/campaign_v3/validation.jsonl
+      - --test-data
+      - /opt/project/data/processed/temporal_bundle/campaign_v3/test.jsonl
+      - --output
+      - /opt/project/artifacts/campaign_model
+      - --gpus-per-trial
+      - ${RAY_GPUS_PER_TRIAL:-0}
+      - --max-concurrent-trials
+      - ${RAY_MAX_CONCURRENT_TRIALS:-1}
     depends_on:
-      - ray-head
-      - ray-worker
-      - mlflow
+      ray-head:
+        condition: service_healthy
+      ray-worker:
+        condition: service_started
+      mlflow:
+        condition: service_started
+
+  ray-review-trainer:
+    <<: *ray-runtime
+    profiles: ["train-review"]
+    command:
+      - ray
+      - job
+      - submit
+      - --address
+      - http://ray-head:8265
+      - --
+      - python
+      - /opt/project/training/ray_review_train.py
+      - --ray-address
+      - auto
+      - --mlflow-uri
+      - http://mlflow:5000
+      - --ray-storage-path
+      - /opt/project/artifacts/ray_results
+      - --train-data
+      - /opt/project/data/processed/dataset_bundle/text/training.jsonl
+      - --validation-data
+      - /opt/project/data/processed/dataset_bundle/text/real/validation.jsonl
+      - --test-data
+      - /opt/project/data/processed/dataset_bundle/text/real/test.jsonl
+      - --output
+      - /opt/project/artifacts/review_distilbert
+      - --smoke
+      - --gpus-per-trial
+      - ${RAY_GPUS_PER_TRIAL:-0}
+      - --max-concurrent-trials
+      - ${RAY_MAX_CONCURRENT_TRIALS:-1}
+    depends_on:
+      ray-head:
+        condition: service_healthy
+      ray-worker:
+        condition: service_started
+      mlflow:
+        condition: service_started
+
+  campaign-scorer:
+    <<: *ray-runtime
+    profiles: ["score"]
+    command:
+      - python
+      - streaming/campaign_scorer.py
+      - --bundle
+      - artifacts/campaign_model
+      - --bootstrap-servers
+      - kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
 
 volumes:
   mlflow-data:

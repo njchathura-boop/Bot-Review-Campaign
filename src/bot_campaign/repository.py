@@ -22,12 +22,12 @@ class InMemoryRepository:
             self._review_inputs.append(review)
             self._reviews.appendleft(record)
 
-    def campaign_candidates(self, product_id: str, limit: int) -> list[Review]:
+    def campaign_candidates(self, category: str, limit: int) -> list[Review]:
         with self._lock:
             matches = [
                 review
                 for review in reversed(self._review_inputs)
-                if review.product_id == product_id
+                if review.category == category
             ]
             return list(reversed(matches[:limit]))
 

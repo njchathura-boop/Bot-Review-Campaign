@@ -1,0 +1,85 @@
+# Airflow training scheduler
+
+Airflow is the outer workflow scheduler. It decides **when** training runs and submits
+jobs to Ray. Ray Tune's ASHA scheduler remains inside each trainer and decides which
+hyperparameter trials continue or stop. MLflow records every trial and selected model.
+
+The DAG is `dags/bot_campaign_training.py`. It runs these tasks sequentially:
+
+```text
+submit temporal ETL Ray Job
+  -> wait without occupying an Airflow worker slot
+  -> submit review Ray Job
+  -> wait without occupying an Airflow worker slot
+  -> submit campaign Ray Job
+  -> wait without occupying an Airflow worker slot
+```
+
+The first job rebuilds the observed behavior profile and the group-isolated
+`campaign_v3` train/validation/test splits from the configured Amazon JSONL inputs. It
+executes `build-temporal-bundle` and then `generate-campaign-splits` inside the project
+Ray image. This makes Airflow the workflow orchestrator while keeping the ETL and model
+dependencies in the reproducible project image.
+
+It defaults to manual triggering because full DistilBERT training is expensive. Set a
+cron only after a full manual run passes acceptance checks. The DAG registers model
+versions but deliberately does not promote or deploy them automatically.
+
+Scheduled outputs are written below `artifacts/candidates/`, not over the bundles
+mounted by FastAPI and the campaign scorer. After evaluation, promote an approved
+MLflow model version through the deployment workflow; do not copy a candidate into a
+production mount merely because its training job succeeded.
+
+## Mount the DAG into Airflow 3.1
+
+For a self-contained local scheduler, run the repository's pinned Airflow stack from
+this directory:
+
+```powershell
+docker compose -f orchestration/docker-compose.airflow.yml up airflow-init
+docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-scheduler airflow-api-server
+```
+
+Open `http://localhost:8080` and sign in with the configured admin credentials (the
+development defaults are `admin`/`admin`). The Compose file mounts this repository's DAG
+and project root directly; no second copy of the DAG is required. Set a strong Fernet
+key and admin password through environment variables before sharing the stack.
+
+Add this read-only volume to the common Airflow service volumes in the Airflow Compose
+file so the DAG processor, scheduler and workers see the same file:
+
+```yaml
+volumes:
+  - "C:/Users/njcha/Desktop/IITM/SEM3/MLOPS/Bot_Campaign_Project/orchestration/dags:/opt/airflow/dags/bot_campaign:ro"
+```
+
+Add these environment values to the common Airflow environment:
+
+```yaml
+environment:
+  BOT_CAMPAIGN_RAY_JOBS_URL: http://host.docker.internal:8265
+  BOT_CAMPAIGN_GPUS_PER_TRIAL: "1"
+  BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS: "1"
+  BOT_CAMPAIGN_BEHAVIORAL_INPUTS: data/raw/amazon_all_beauty_sample.jsonl
+  BOT_CAMPAIGN_TEMPORAL_ROOT: data/processed/temporal_bundle
+  BOT_CAMPAIGN_CAMPAIGN_SCENARIO_COUNT: "2000"
+  BOT_CAMPAIGN_DATA_SEED: "42"
+  # Leave unset for manual-only runs. Example weekly Sunday at 02:00 UTC:
+  # BOT_CAMPAIGN_RETRAIN_CRON: "0 2 * * 0"
+```
+
+Recreate the Airflow DAG processor, scheduler and worker after changing their Compose
+file. In the Airflow UI, enable `bot_campaign_model_retraining` and trigger it manually.
+
+## Required services
+
+Before triggering the DAG:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
+  up -d mlflow ray-head ray-worker
+```
+
+Verify Ray at `http://localhost:8265` and MLflow at `http://localhost:5001`. The Airflow
+container reaches Ray through `host.docker.internal`; the submitted Ray driver reaches
+MLflow through the internal `mlflow:5000` Compose hostname.

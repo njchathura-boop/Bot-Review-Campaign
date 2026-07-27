@@ -21,19 +21,30 @@ def ready(service: TrustRuntime = Depends(runtime)):
     return {"status": "ready", "model_path": service.settings.model_path.name}
 
 
-@router.get("/v1/operations")
+@router.get("/v1/operations", include_in_schema=False)
+@router.get("/v1/ops/summary")
 def operations(service: TrustRuntime = Depends(runtime)):
     return service.operations()
 
 
-@router.get("/v1/monitoring")
+@router.get("/v1/monitoring", include_in_schema=False)
+@router.get("/v1/monitoring/summary")
 def monitoring(service: TrustRuntime = Depends(runtime)):
     return service.monitoring()
 
 
-@router.get("/v1/lineage")
+@router.get("/v1/lineage", include_in_schema=False)
+@router.get("/v1/lineage/current")
 def lineage(service: TrustRuntime = Depends(runtime)):
     return service.lineage()
+
+
+@router.get("/v1/lineage/predictions/{review_id}")
+def prediction_lineage(review_id: str, service: TrustRuntime = Depends(runtime)):
+    record = service.repository.get_review(review_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Prediction lineage not found")
+    return record["lineage"]
 
 
 @router.get("/metrics", response_class=PlainTextResponse)

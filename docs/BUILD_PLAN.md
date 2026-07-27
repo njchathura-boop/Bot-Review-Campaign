@@ -30,9 +30,9 @@ score both one review and a review window.
 ### Phase 2 — real datasets and stronger experiments
 
 - Pin dataset licenses, checksums, source URLs, snapshots, and dataset cards.
-- Ingest a bounded Amazon Reviews 2023 category first; keep Ott/MAiDE-up source
-  domains visible and never mix train/test duplicates or paraphrases.
-- Use group-aware splits (source/hotel/product/author where available) and a final
+- Prepare the local labeled ecommerce product-review corpus and retain its provenance;
+  augmentation is allowed only after real train/validation/test splitting.
+- Use group-aware splits (text family/product/author where available) and a final
   untouched temporal test set. Compare text-only, metadata-only, and hybrid models.
 - Add calibration, threshold selection based on moderation cost, PR-AUC confidence
   intervals, slice metrics, SHAP/global explanations, and adversarial tests.
@@ -68,9 +68,11 @@ Exit gate: load, failure-recovery, drift, rollback, privacy, and security tests 
 
 ## Data contract
 
-Canonical review fields are `review_id`, `user_id`, `product_id`, `text`, `rating`,
-`timestamp`, `verified_purchase`, and `helpful_votes`. Supervised records additionally
-require `label` (`0` genuine, `1` fake) and should carry `source` and `group_id`.
+Behavioral review events contain `review_id`, `user_id`, `product_id`, `text`, `rating`,
+`timestamp`, `verified_purchase`, and `helpful_votes`. Supervised text records use a
+separate contract: `review_id`, `text`, `label`, `source`, `group_id`, provenance, and
+optional observed `category`/`rating`. They never receive invented users, products,
+timestamps, or launch dates.
 
 Timestamps are normalized to UTC. Identifiers remain strings. Rejected records are
 counted with reasons. Personally identifying fields are neither required nor stored.
@@ -102,4 +104,3 @@ states, and resilient API behavior are required before visual polish.
 - **Privacy/security:** minimize identifiers, hash/pseudonymize upstream, validate payloads,
   rate-limit/authenticate moderation endpoints, and never render raw review HTML.
 - **Training-serving skew:** persist one fitted pipeline and reuse canonical transformations.
-

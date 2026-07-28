@@ -10,12 +10,26 @@ const examples = {
 };
 let feed = [];
 
+function formatLatency(value) {
+  const milliseconds = Number(value) || 0;
+  return milliseconds >= 1000 ? `${(milliseconds / 1000).toFixed(1)} s` : `${Math.round(milliseconds)} ms`;
+}
+
 function setExample(key) {
   const item = examples[key];
   $("#review-text").value = item.text;
   $("#rating").value = String(item.rating);
   $("#verified").checked = item.verified;
   $("#product-id").value = item.product;
+  updateCharacterCount();
+}
+
+function updateCharacterCount() {
+  const field = $("#review-text");
+  const counter = $("#review-char-count");
+  if (!field || !counter) return;
+  counter.textContent = `${field.value.length.toLocaleString()} / 20,000`;
+  counter.classList.toggle("near-limit", field.value.length > 18000);
 }
 
 function payload() {
@@ -64,6 +78,10 @@ function renderResult(data) {
   root.append(modelBadge);
   root.append(element("div", "risk-number", `${Math.round(data.fake_probability * 100)}%`));
   root.append(element("p", "meta", `${Math.round(data.calibrated_confidence * 100)}% calibrated confidence · ${data.processing_ms} ms`));
+  const confidenceMeta = root.querySelector(".meta");
+  if (confidenceMeta) confidenceMeta.textContent = `${Math.round(data.calibrated_confidence * 100)}% calibrated confidence · ${formatLatency(data.processing_ms)}`;
+  const latencyNote = data.processing_ms > 1000 ? "first request · model warming" : "warm inference";
+  root.append(element("p", "latency-note", latencyNote));
   const track = element("div", "risk-track"); const fill = element("div", "risk-fill");
   fill.style.width = `${Math.round(data.fake_probability * 100)}%`; track.append(fill); root.append(track);
   const dl = element("dl");
@@ -85,7 +103,7 @@ async function scanReview(event) {
   const animation = animateSteps();
   try {
     const data = await fetchJson("/v1/reviews/score", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload())});
-    await animation; renderResult(data); $("#scan-time").textContent = `${data.processing_ms} MS`;
+    await animation; renderResult(data); $("#scan-time").textContent = formatLatency(data.processing_ms).toUpperCase();
     await refreshAll();
   } catch (error) {
     document.querySelectorAll("#scan-steps li.active").forEach((item) => item.className = "failed");
@@ -183,7 +201,7 @@ function renderBars(root, rows) {
 
 async function loadMonitoring() {
   const data = await fetchJson("/v1/monitoring");
-  $("#hero-scans").textContent = data.reviews_processed; $("#hero-campaigns").textContent = data.campaign_alerts; $("#hero-latency").textContent = `${data.latency_ms.p95} ms`;
+  $("#hero-scans").textContent = data.reviews_processed; $("#hero-campaigns").textContent = data.campaign_alerts; $("#hero-latency").textContent = formatLatency(data.latency_ms.p95);
   $("#monitor-updated").textContent = `Updated ${new Date(data.updated_at).toLocaleTimeString()}`;
   const metrics = [["Throughput", data.reviews_per_second, "/ sec"], ["API errors", data.api_error_rate, "%"], ["Kafka lag", data.kafka_consumer_lag, "events"], ["Campaigns", data.campaign_alerts, "alerts"], ["Soft limits", data.soft_limited_campaigns, "active"], ["Mean risk", Math.round(data.mean_review_risk * 100), "%"]];
   const root = $("#metric-grid"); root.replaceChildren();
@@ -208,7 +226,22 @@ async function refreshAll() {
 
 $("#review-form").addEventListener("submit", scanReview);
 $("#example").addEventListener("change", (event) => setExample(event.target.value));
+$("#review-text").addEventListener("input", updateCharacterCount);
 $("#feed-filter").addEventListener("change", renderFeed);
 $("#replay").addEventListener("click", replayCampaign);
 $("#timestamp").value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 setExample("genuine"); health(); refreshAll(); setInterval(loadMonitoring, 10000);
+
+const navLinks = [...document.querySelectorAll("nav a")];
+const observedSections = navLinks
+  .map((link) => document.querySelector(link.getAttribute("href")))
+  .filter(Boolean);
+if ("IntersectionObserver" in window) {
+  const navObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      navLinks.forEach((link) => link.toggleAttribute("aria-current", link.getAttribute("href") === `#${entry.target.id}`));
+    });
+  }, {rootMargin: "-25% 0px -65% 0px", threshold: 0});
+  observedSections.forEach((section) => navObserver.observe(section));
+}

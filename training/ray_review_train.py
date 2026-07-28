@@ -145,6 +145,7 @@ def train_trial(config: dict) -> None:
     import numpy as np
     import torch
     from ray import tune
+    from ray.train import get_checkpoint
     from ray.tune import Checkpoint
 
     from bot_campaign.review_transformer import (
@@ -203,8 +204,24 @@ def train_trial(config: dict) -> None:
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, learning_rate_factor)
     generator = torch.Generator().manual_seed(int(config["seed"]))
+    start_epoch = 0
+    checkpoint = get_checkpoint()
+    if checkpoint is not None:
+        with checkpoint.as_directory() as checkpoint_dir:
+            state_path = Path(checkpoint_dir) / "training_state.pt"
+            if state_path.exists():
+                state = torch.load(state_path, map_location=device, weights_only=False)
+                model.load_state_dict(state["model"])
+                optimizer.load_state_dict(state["optimizer"])
+                scheduler.load_state_dict(state["scheduler"])
+                generator.set_state(state["generator_state"])
+                for optimizer_state in optimizer.state.values():
+                    for key, value in optimizer_state.items():
+                        if torch.is_tensor(value):
+                            optimizer_state[key] = value.to(device)
+                start_epoch = int(state["epoch"])
 
-    for epoch in range(int(config["epochs"])):
+    for epoch in range(start_epoch, int(config["epochs"])):
         model.train()
         order = torch.randperm(len(training), generator=generator).tolist()
         losses = []
@@ -238,6 +255,16 @@ def train_trial(config: dict) -> None:
             tokenizer,
             model_config,
             {"trial": tune.get_context().get_trial_name(), "epoch": epoch + 1},
+        )
+        torch.save(
+            {
+                "epoch": epoch + 1,
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scheduler": scheduler.state_dict(),
+                "generator_state": generator.get_state(),
+            },
+            checkpoint_dir / "training_state.pt",
         )
         # ASHA may stop a weak trial after any report, so every report must be resumable.
         tune.report(metrics, checkpoint=Checkpoint.from_directory(checkpoint_dir))
@@ -279,6 +306,11 @@ def main() -> None:
     parser.add_argument("--max-test-records", type=int)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume the existing Ray Tune experiment from --ray-storage-path",
+    )
     args = parser.parse_args()
     if args.max_concurrent_trials < 1:
         parser.error("--max-concurrent-trials must be at least 1")
@@ -336,9 +368,7 @@ def main() -> None:
             },
         )
         epochs = 1 if args.smoke else args.epochs
-        tuner = tune.Tuner(
-            trainable,
-            param_space={
+        param_space = {
                 "train_data": str(Path(args.train_data).resolve()),
                 "validation_data": str(Path(args.validation_data).resolve()),
                 "max_train_records": train_limit,
@@ -356,8 +386,8 @@ def main() -> None:
                 "gradient_clip_norm": tune.choice([0.5, 1.0, 2.0]),
                 "positive_weight_multiplier": tune.choice([0.75, 1.0, 1.25]),
                 "label_smoothing": tune.choice([0.0, 0.05, 0.1]),
-            },
-            tune_config=tune.TuneConfig(
+            }
+        tune_config = tune.TuneConfig(
                 metric="pr_auc",
                 mode="max",
                 num_samples=1 if args.smoke else args.num_samples,
@@ -365,8 +395,8 @@ def main() -> None:
                 scheduler=ASHAScheduler(
                     max_t=epochs, grace_period=1, reduction_factor=2
                 ),
-            ),
-            run_config=RunConfig(
+            )
+        run_config = RunConfig(
                 name=args.experiment,
                 storage_path=_storage_path(args.ray_storage_path),
                 callbacks=[
@@ -376,8 +406,28 @@ def main() -> None:
                         tags={"git_sha": _git_sha(), "model_role": "individual-review-risk"},
                     )
                 ],
-            ),
-        )
+            )
+        if args.resume:
+            restore_path = Path(_storage_path(args.ray_storage_path)) / args.experiment
+            if not tune.Tuner.can_restore(str(restore_path)):
+                raise SystemExit(
+                    f"No restorable Ray experiment found at {restore_path}. "
+                    "Run without --resume to start a new experiment."
+                )
+            print(f"Resuming Ray Tune experiment from {restore_path}")
+            tuner = tune.Tuner.restore(
+                str(restore_path),
+                trainable=trainable,
+                resume_unfinished=True,
+                resume_errored=True,
+            )
+        else:
+            tuner = tune.Tuner(
+                trainable,
+                param_space=param_space,
+                tune_config=tune_config,
+                run_config=run_config,
+            )
         results = tuner.fit()
         best = results.get_best_result(metric="pr_auc", mode="max")
         if best.checkpoint is None:

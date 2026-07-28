@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 import platform
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .campaign import detect_campaigns
@@ -51,7 +52,15 @@ class TrustRuntime:
 
     @property
     def model_version(self) -> str:
-        return str(self._scorer.bundle.get("version", "unknown")) if self._scorer else "not-loaded"
+        if self._scorer:
+            return str(self._scorer.bundle.get("version", "unknown"))
+        bundle_path = self.settings.review_transformer_path / "bundle.json"
+        if bundle_path.exists():
+            try:
+                return str(json.loads(bundle_path.read_text(encoding="utf-8")).get("version", "unknown"))
+            except (OSError, ValueError, TypeError):
+                return "bundle-invalid"
+        return "not-loaded"
 
     def scorer(self) -> ReviewScorer | ReviewDistilBertScorer:
         if self._scorer is None:
@@ -93,7 +102,7 @@ class TrustRuntime:
         )
         alerts = detect_campaigns([*candidates, review])
         matching = next((alert for alert in alerts if review.review_id in alert.review_ids), None)
-        detected_at = datetime.now(timezone.utc).isoformat()
+        detected_at = datetime.now(UTC).isoformat()
         if matching:
             self.repository.upsert_campaign(matching, detected_at)
         prediction.processing_ms = round(latency_ms, 2)
@@ -129,7 +138,7 @@ class TrustRuntime:
                 replay_window(reviews), self.campaign_scorer()
             )
             campaign_engine = "hybrid-distilbert"
-            detected_at = datetime.now(timezone.utc).isoformat()
+            detected_at = datetime.now(UTC).isoformat()
             for score in hybrid_scores:
                 if not score["candidate"]:
                     continue
@@ -173,7 +182,7 @@ class TrustRuntime:
         campaign = self.repository.get_campaign(campaign_id)
         if not campaign:
             return None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if decision == "confirm":
             campaign.update(
                 status="confirmed",
@@ -274,7 +283,7 @@ class TrustRuntime:
 
 
 def replay_reviews(scenario: str) -> list[Review]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     negative = "negative" in scenario
     cross_product = "cross" in scenario
     product = "demo-competitor-watch" if negative else "demo-smartwatch"

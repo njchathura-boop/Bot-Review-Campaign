@@ -59,6 +59,9 @@ function renderResult(data) {
   const root = $("#result");
   root.replaceChildren();
   root.append(element("span", `status ${data.needs_review ? "warn" : "safe"}`, data.needs_review ? "needs review" : "normal"));
+  const modelBadge = element("span", "model-badge", data.model_version || "model unavailable");
+  modelBadge.title = "Exact model bundle used for this prediction";
+  root.append(modelBadge);
   root.append(element("div", "risk-number", `${Math.round(data.fake_probability * 100)}%`));
   root.append(element("p", "meta", `${Math.round(data.calibrated_confidence * 100)}% calibrated confidence · ${data.processing_ms} ms`));
   const track = element("div", "risk-track"); const fill = element("div", "risk-fill");

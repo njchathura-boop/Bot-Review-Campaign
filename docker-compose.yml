@@ -5,7 +5,10 @@ x-ray-runtime: &ray-runtime
   build:
     context: .
     dockerfile: docker/ray.Dockerfile
-  shm_size: 2gb
+  # Ray's object store should use shared memory instead of falling back to /tmp.
+  # Full DistilBERT trials need more than the default 64 MB; 4 GB is appropriate
+  # when Docker Desktop has at least 12 GB assigned to WSL2.
+  shm_size: 4gb
   volumes:
     - ./:/opt/project
   environment:

@@ -42,6 +42,7 @@
       </div>
       <div class="scanner-grid">
         <form id="review-form" class="panel review-form">
+          <div class="form-kicker"><span>INFERENCE WORKSPACE</span><span id="review-char-count">0 / 20,000</span></div>
           <label for="example">Load an example</label>
           <select id="example">
             <option value="genuine">Likely genuine review</option>
@@ -52,7 +53,7 @@
             <option value="cross-product-campaign">Cross-product campaign</option>
             <option value="legitimate-burst">Legitimate sale-burst example</option>
           </select>
-          <label for="review-text">Review text</label>
+          <label for="review-text">Review text <span class="label-hint">Natural language evidence</span></label>
           <textarea id="review-text" required minlength="3" maxlength="20000"></textarea>
           <div class="fields three">
             <label>Product ID<input id="product-id" value="quietform-studio" maxlength="200"></label>

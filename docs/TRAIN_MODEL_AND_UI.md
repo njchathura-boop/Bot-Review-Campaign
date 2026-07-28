@@ -293,6 +293,46 @@ campaign across subsets.
 
 Only after the pilot succeeds, remove group limits:
 
+On Windows, submit the full jobs through the Linux Ray containers. This avoids the
+Windows Application Control restriction on the native `raylet.exe`:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
+  --profile train-review run --rm --entrypoint ray ray-review-trainer job submit `
+  --address http://ray-head:8265 -- `
+  python /opt/project/training/ray_review_train.py `
+  --ray-address auto `
+  --mlflow-uri http://mlflow:5000 `
+  --ray-storage-path /opt/project/artifacts/ray_results `
+  --train-data /opt/project/data/processed/dataset_bundle/text/training.jsonl `
+  --validation-data /opt/project/data/processed/dataset_bundle/text/real/validation.jsonl `
+  --test-data /opt/project/data/processed/dataset_bundle/text/real/test.jsonl `
+  --output /opt/project/artifacts/review_distilbert `
+  --num-samples 20 --epochs 4 --cpus-per-trial 4 --gpus-per-trial 1 `
+  --max-concurrent-trials 1 --minimum-precision 0.90
+```
+
+Then submit the complete campaign job:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
+  --profile train run --rm --entrypoint ray ray-trainer job submit `
+  --address http://ray-head:8265 -- `
+  python /opt/project/training/ray_train.py `
+  --ray-address auto `
+  --mlflow-uri http://mlflow:5000 `
+  --ray-storage-path /opt/project/artifacts/ray_results `
+  --train-data /opt/project/data/processed/temporal_bundle/campaign_v3/train.jsonl `
+  --validation-data /opt/project/data/processed/temporal_bundle/campaign_v3/validation.jsonl `
+  --test-data /opt/project/data/processed/temporal_bundle/campaign_v3/test.jsonl `
+  --output /opt/project/artifacts/campaign_model `
+  --num-samples 20 --epochs 4 --cpus-per-trial 4 --gpus-per-trial 1 `
+  --max-concurrent-trials 1 --minimum-precision 0.95
+```
+
+The commands below are equivalent native-Linux commands. Do not run them from a
+Windows host when native Ray is blocked.
+
 ```powershell
 python training/ray_review_train.py `
   --output artifacts/review_distilbert `

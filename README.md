@@ -41,12 +41,14 @@ TensorRT export remains a later optimization.
 | Dataset/model versioning | DVC manifests/hashes, MLflow registered models, Git SHA and immutable image tags | `dvc.yaml`, model lineage endpoints |
 | Deployment | FastAPI API/UI, Docker Compose, Kubernetes and Argo CD manifests | `Dockerfile`, `docker-compose.yml`, `k8s/`, `deploy/` |
 | Monitoring | Prometheus metrics, Grafana dashboards, structured logs, drift/latency/lag alert definitions | `monitoring/`, `/metrics` |
-| CI/CD | GitHub Actions lint, tests, smoke training, Docker BuildKit, Trivy | `.github/workflows/ci.yml` |
+| CI/CD | GitHub Actions quality gates, immutable GHCR images, Trivy scan, Kubernetes staging rollout | `.github/workflows/ci.yml`, `.github/workflows/cd.yml` |
 | Documentation | Setup, architecture, script call graph, operations, report and demonstration sequence | `docs/`, this README |
 
 The report-ready explanation is in [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md).
 Airflow setup and its ETL → Ray task sequence are in
 [`orchestration/README.md`](orchestration/README.md).
+The single command-by-command execution guide is
+[`docs/END_TO_END_RUNBOOK.md`](docs/END_TO_END_RUNBOOK.md).
 
 ## Data architecture
 
@@ -571,6 +573,38 @@ Exact leakage-safe training and UI verification commands are in
 [`docs/TRAIN_MODEL_AND_UI.md`](docs/TRAIN_MODEL_AND_UI.md).
 The beginner-friendly, function-by-function source map and current regeneration decision
 are in [`docs/SCRIPT_FUNCTION_REFERENCE.md`](docs/SCRIPT_FUNCTION_REFERENCE.md).
+Monitoring dashboards, alert thresholds, CI checks, CD releases, secrets, and rollback
+procedures are in [`docs/MONITORING_AND_CICD.md`](docs/MONITORING_AND_CICD.md).
+The complete Git and DVC command reference is in
+[`docs/GIT_AND_DVC_COMMANDS.md`](docs/GIT_AND_DVC_COMMANDS.md).
+
+## CI/CD workflow
+
+Pull requests run [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It installs the
+project, runs smoke training, compiles the Airflow DAGs, checks lint, runs tests, builds
+the Docker image, and blocks high/critical Trivy findings.
+
+Pushing a semantic version tag such as `v1.1.0` starts
+[`.github/workflows/cd.yml`](.github/workflows/cd.yml). It publishes an immutable
+Git-SHA image, scans it, renders `k8s/base.yaml`, deploys to the protected `staging`
+environment, waits for rollout, and calls `/health/ready` inside the cluster.
+
+Configure the GitHub `staging` environment with a base64-encoded `KUBE_CONFIG_DATA`
+secret before enabling deployment. Argo CD can watch `k8s/` and reconcile the same
+immutable image. The public UI cannot trigger deployments.
+
+```powershell
+git switch -c feat/my-change
+git add src web tests
+git commit -m "feat(api): describe the change"
+git push -u origin feat/my-change
+gh pr create --fill
+
+git switch main
+git pull --ff-only
+git tag -a v1.1.0 -m "Bot campaign detection v1.1.0"
+git push origin v1.1.0
+```
 
 ## Git workflow
 

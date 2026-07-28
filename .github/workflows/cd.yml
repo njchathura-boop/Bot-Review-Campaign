@@ -1,0 +1,106 @@
+name: cd
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: "Git SHA to deploy (defaults to the selected ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  publish:
+    name: Build and publish immutable image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image identity
+        id: meta
+        shell: bash
+        run: |
+          sha="${{ inputs.image_sha }}"
+          if [ -z "$sha" ]; then sha="${GITHUB_SHA}"; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE_NAME}:$sha" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Git-SHA image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan published image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  deploy-staging:
+    name: Deploy staging and smoke test
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubernetes access
+        shell: bash
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        run: |
+          test -n "$KUBE_CONFIG_DATA" || { echo "Missing KUBE_CONFIG_DATA staging secret"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/kube"
+          echo "$KUBE_CONFIG_DATA" | base64 --decode > "$RUNNER_TEMP/kube/config"
+          echo "KUBECONFIG=$RUNNER_TEMP/kube/config" >> "$GITHUB_ENV"
+
+      - name: Render immutable image reference
+        shell: bash
+        run: |
+          sed "s|REPLACE_WITH_GIT_SHA|${{ needs.publish.outputs.sha }}|g" k8s/base.yaml > "$RUNNER_TEMP/base.yaml"
+
+      - name: Apply manifests
+        run: kubectl apply -f "$RUNNER_TEMP/base.yaml"
+
+      - name: Wait for rollout
+        run: kubectl -n bot-campaign rollout status deployment/bot-campaign-api --timeout=180s
+
+      - name: Smoke test readiness
+        shell: bash
+        run: |
+          kubectl -n bot-campaign run cd-smoke-${GITHUB_RUN_ID} --rm -i --restart=Never \
+            --image=curlimages/curl:8.10.1 -- \
+            curl --fail --silent --show-error http://bot-campaign-api/health/ready
+
+      - name: Record deployment summary
+        run: |
+          echo "Deployed ${{ needs.publish.outputs.image }} to staging"
+          kubectl -n bot-campaign get deployment bot-campaign-api -o wide

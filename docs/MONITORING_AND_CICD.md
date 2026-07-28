@@ -1,0 +1,268 @@
+# Monitoring and CI/CD Guide
+
+This guide explains how to observe the Bot Campaign Detection platform and how code,
+models, containers, and Kubernetes deployments move safely from a pull request to
+staging.
+
+## 1. Monitoring architecture
+
+```mermaid
+flowchart LR
+    API[FastAPI inference API] --> METRICS[/metrics]
+    API --> LOGS[Container logs]
+    METRICS --> PROM[Prometheus]
+    PROM --> GRAF[Grafana dashboards]
+    LOGS --> ELASTIC[Elastic / Kibana]
+    EVENTS[Kafka review events] --> SPARK[Spark streaming]
+    SPARK --> CAMPAIGN[Campaign detector]
+    API --> EVID[Evidently drift reports]
+    TRAIN[Ray training] --> MLFLOW[MLflow experiments and registry]
+```
+
+The public UI is a read-only operational summary. It does not expose secrets,
+arbitrary Prometheus queries, or infrastructure mutation controls.
+
+## 2. Start local monitoring
+
+From the repository root:
+
+```powershell
+docker compose up -d api prometheus grafana mlflow
+docker compose ps
+```
+
+Optional streaming services:
+
+```powershell
+docker compose up -d kafka spark-master spark-worker spark-stream
+```
+
+Local endpoints:
+
+| Purpose | URL |
+|---|---|
+| Trust Console monitoring section | <http://localhost:8000/#monitoring> |
+| Prometheus | <http://localhost:9090> |
+| Grafana | <http://localhost:3000> |
+| API metrics | <http://localhost:8000/metrics> |
+| API readiness | <http://localhost:8000/health/ready> |
+| MLflow | <http://localhost:5001> |
+| Ray dashboard | <http://localhost:8265> |
+| Spark UI | <http://localhost:8082> |
+
+The API container must mount the trained bundle:
+
+```yaml
+./artifacts/review_distilbert:/models/review_distilbert:ro
+```
+
+Verify the promoted model:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health/ready | ConvertTo-Json
+Invoke-RestMethod http://localhost:8000/v1/ops/summary | ConvertTo-Json -Depth 5
+```
+
+The readiness response should identify `review-risk-distilbert-v1`.
+
+## 3. What to monitor
+
+### API and model
+
+- Request throughput and processed reviews.
+- p50, p95, and p99 inference latency.
+- HTTP error rate and unavailable-model events.
+- Review-risk distribution and campaign-alert rate.
+- Model version, feature version, schema version, and data version.
+- GPU, CPU, memory, and container restart count.
+
+### Streaming pipeline
+
+- Kafka consumer lag and failed consumers.
+- Spark input rows, processed rows, checkpoint age, and job failures.
+- Campaign candidate volume and cross-product graph activity.
+- Campaign dismissal and soft-limit rates.
+
+### Data and model quality
+
+- Missing-value and schema-validation failures.
+- Feature and embedding drift from Evidently reports.
+- Prediction drift and class-balance changes.
+- Validation/test PR-AUC, ROC-AUC, precision, recall, and calibration.
+- Moderator false-alert and dismissal rates.
+
+## 4. Useful commands
+
+```powershell
+# API logs
+docker compose logs -f api
+
+# Streaming logs
+docker compose logs -f kafka
+docker compose logs -f spark-stream
+
+# Resource usage
+docker stats
+
+# Raw Prometheus exposition
+Invoke-WebRequest http://localhost:8000/metrics -UseBasicParsing
+
+# Service health
+docker compose ps
+```
+
+For Kubernetes:
+
+```powershell
+kubectl -n bot-campaign get pods
+kubectl -n bot-campaign get deployment bot-campaign-api
+kubectl -n bot-campaign rollout status deployment/bot-campaign-api
+kubectl -n bot-campaign logs deployment/bot-campaign-api --tail=100
+```
+
+## 5. Alert thresholds
+
+Configure these in Prometheus/Grafana alert rules:
+
+| Alert | Initial threshold | Action |
+|---|---:|---|
+| API p95 latency | >150 ms | Inspect CPU/GPU saturation and queue depth |
+| API error rate | >1% | Check logs and rollback if persistent |
+| Kafka lag | Beyond processing window | Scale consumers and inspect Spark |
+| Spark checkpoint failure | Any failure | Stop promotion and restore checkpoint |
+| Model unavailable/version mismatch | Any occurrence | Stop traffic and restore previous bundle |
+| Drift | Evidently project threshold | Review data and approve retraining |
+| Campaign-alert spike | Baseline deviation | Check launch events and abuse reports |
+| Dismissal-rate spike | Baseline deviation | Recalibrate threshold; never auto-enforce |
+| GPU memory saturation | Sustained high usage | Reduce batch size or scale replicas |
+
+Individual review risk must never directly activate a soft limit. Moderators confirm
+campaign evidence before enforcement.
+
+## 6. CI workflow
+
+CI is defined in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+
+It runs for pull requests and pushes to `main` or version tags. The quality job:
+
+1. Checks out the repository.
+2. Installs Python, NLP, UI, and development dependencies.
+3. Installs Chromium for UI tests.
+4. Runs deterministic smoke training.
+5. Compiles Airflow DAGs.
+6. Runs Ruff and the complete test suite.
+
+The container job then:
+
+1. Builds the Docker image with BuildKit.
+2. Uses the immutable Git SHA as the image tag.
+3. Pushes to GHCR on a repository push.
+4. Scans the image with Trivy.
+5. Fails the workflow on high or critical findings.
+
+Check CI locally before opening a pull request:
+
+```powershell
+python -m ruff check src tests training streaming spark
+python -m pytest -q -p no:cacheprovider
+python -m compileall -q orchestration/dags
+docker build -t bot-campaign-ci:local .
+```
+
+## 7. CD workflow
+
+CD is defined in [`.github/workflows/cd.yml`](../.github/workflows/cd.yml).
+
+It runs for semantic version tags (`v*`) or from `workflow_dispatch`:
+
+```text
+Git tag
+  -> Build image with Git SHA
+  -> Push to GHCR
+  -> Trivy scan
+  -> Render k8s/base.yaml with exact image
+  -> Deploy staging
+  -> Wait for rollout
+  -> Call /health/ready
+```
+
+The deployment uses:
+
+- Three initial API replicas.
+- Readiness and liveness probes.
+- Horizontal Pod Autoscaling.
+- Pod disruption budget.
+- Immutable image references.
+- Kubernetes rolling replacement.
+- Argo CD reconciliation through `deploy/argocd-application.yaml`.
+
+### Required GitHub configuration
+
+Create a protected GitHub environment named `staging` and add:
+
+```text
+KUBE_CONFIG_DATA = base64-encoded kubeconfig
+```
+
+The workflow also uses the built-in `GITHUB_TOKEN` to publish to GHCR. Restrict the
+staging environment to approved maintainers and require deployment approval.
+
+### Release a version
+
+```powershell
+git switch main
+git pull --ff-only
+git tag -a v1.1.0 -m "Bot campaign detection v1.1.0"
+git push origin v1.1.0
+```
+
+Then inspect **GitHub → Actions → cd**. The exact image is printed in the workflow
+summary and can be traced to the Git commit, model bundle, data version, and schema.
+
+## 8. Rollback
+
+### Local Docker rollback
+
+```powershell
+docker compose up -d --force-recreate api
+```
+
+Restore the previous model directory under `artifacts/review_distilbert`, then recreate
+the API. Keep the previous bundle until the new model passes its monitoring window.
+
+### Kubernetes rollback
+
+```powershell
+kubectl -n bot-campaign rollout history deployment/bot-campaign-api
+kubectl -n bot-campaign rollout undo deployment/bot-campaign-api
+kubectl -n bot-campaign rollout status deployment/bot-campaign-api
+```
+
+Argo CD can also sync the previous known-good revision. Roll back both the application
+image and model bundle when a version mismatch is detected.
+
+## 9. Retraining decision
+
+Do not retrain automatically from a single alert. Start retraining only after:
+
+1. Drift and quality reports are reviewed.
+2. The data snapshot is versioned with DVC.
+3. A leakage-safe train/validation/test split is generated.
+4. Ray trials are tracked in MLflow.
+5. The candidate beats the production model on real-only test data.
+6. A moderator and owner approve promotion.
+
+Every production prediction must remain traceable to Git, Docker, MLflow, DVC, feature,
+Kafka schema, and deployment versions.
+
+## 10. Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| UI shows model unavailable | `docker compose ps api`; check the read-only model mount and `bundle.json` |
+| Grafana does not open | `docker compose up -d prometheus grafana` |
+| No Kafka/Spark status | Start streaming services and configure API environment variables |
+| High first-request latency | Expected lazy DistilBERT load; warm the API before measuring |
+| CD stops at Kubernetes access | Add valid `KUBE_CONFIG_DATA` to the `staging` environment |
+| Rollout readiness fails | Confirm the production cluster has the promoted model bundle mounted or provisioned |
+| Trivy blocks release | Fix the vulnerable dependency or image package before retagging |

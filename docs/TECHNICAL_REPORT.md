@@ -169,3 +169,237 @@ scenarios are therefore used to test coordination logic, while Amazon behavior r
 unlabelled. Future work should add moderator-confirmed labels, multilingual encoders,
 online feature stores, stronger account graph algorithms, privacy reviews, and a
 shadow-mode production canary before enforcement.
+
+## 11. Executive summary
+
+This project implements an on-premises ecommerce trust platform for detecting suspicious
+reviews and coordinated review campaigns. The central product decision is deliberately
+split into two outputs. A single-review DistilBERT classifier produces calibrated review
+risk for moderator triage. A separate hybrid campaign model combines review language
+with product, account, rating, event-time, launch-proximity, and burst features. This
+prevents a high text score from being treated as proof of abuse or as an automatic
+enforcement decision.
+
+The completed system includes an Airflow-orchestrated data pipeline, Kafka and Spark
+streaming components, leakage-safe preprocessing, a TF-IDF Logistic Regression baseline,
+Ray Tune distributed DistilBERT training, MLflow tracking, DVC metadata, FastAPI serving,
+Docker packaging, Prometheus/Grafana monitoring, Evidently drift hooks, GitHub Actions,
+and Kubernetes/Argo CD deployment manifests. The web console makes the complete path
+visible: scan stages, evidence, campaign membership, service health, metrics, and
+prediction lineage.
+
+The promoted review model is `review-risk-distilbert-v1`. Its selected full-data Ray
+trial achieved PR-AUC 0.9353, ROC-AUC 0.9215, F1 0.8308, precision 0.8005, recall 0.8635,
+Brier score 0.1305, and log loss 0.4443 on the held-out validation evaluation recorded
+by the training run. The untouched test result must be reported from the final evaluation
+artifact when preparing the submission. Campaign metrics are reported separately because campaign
+scenarios are controlled and do not represent verified platform abuse labels.
+
+## 12. Course-requirement compliance matrix
+
+| Requirement | Implementation in this project | Evidence |
+|---|---|---|
+| Git/GitHub | Feature branches, Conventional Commits, protected `main`, release tags | `git log`, GitHub repository |
+| Airflow | Scheduled DAG submits ETL and training jobs with retries and single active run | `orchestration/dags/bot_campaign_training.py` |
+| Additional data tool | Kafka transports review events; Spark performs event-time windows and watermarks | `streaming/`, `spark/` |
+| Data processing | Canonicalization, missing-value defaults, duplicate rejection, UTC normalization, feature contracts | `src/bot_campaign/data.py`, `temporal.py` |
+| Imbalance/augmentation | Class weights and train-only deterministic synthetic scenarios capped by policy | `labeled_datasets.py`, `synthetic.py` |
+| Two models | TF-IDF/style Logistic Regression baseline and DistilBERT review model; separate hybrid campaign model | `model.py`, `ray_review_train.py`, `ray_train.py` |
+| Metrics | PR-AUC, ROC-AUC, precision, recall, F1, Brier score, log loss, latency | Ray results, MLflow, API metrics |
+| MLflow | Experiment tracking, run parameters, metrics, selected model registration | MLflow at `http://localhost:5001` |
+| DVC | Pipeline metadata, lockfile workflow, remote storage instructions | `dvc.yaml`, `.dvc/`, DVC guide |
+| FastAPI | Versioned score, replay, campaign, operations, lineage, health, and metrics endpoints | `src/bot_campaign/api.py`, `routes/` |
+| Docker | Reproducible API, Ray, MLflow, Kafka, Spark, Prometheus, and Grafana services | `Dockerfile`, `docker-compose.yml` |
+| Monitoring | Prometheus metrics, Grafana dashboards, logs, latency/prediction logging, drift fields | `observability.py`, monitoring guide |
+| CI/CD | GitHub Actions quality gates, image scan, GHCR image, Kubernetes staging rollout | `.github/workflows/ci.yml`, `cd.yml` |
+| Documentation | Root README, ETL/model guide, monitoring guide, Git/DVC guide, this report | `README.md`, `docs/` |
+
+## 13. Dataset inventory and provenance
+
+The project keeps labelled text data separate from unlabelled temporal behavior. This is
+important because Amazon Reviews 2023 contains timestamps and ecommerce metadata but does
+not provide a trustworthy deceptive-review label. Assigning fake labels to those rows
+would create label leakage and false confidence.
+
+| Dataset/output | Role | Current documented size |
+|---|---|---:|
+| Ecommerce labelled product reviews | Text supervision | Manifest-controlled; normalized by the labelled loader |
+| Kaggle fake-review export | Additional ecommerce fake/real text labels | Normalized into the same schema |
+| Amazon Reviews 2023 category files | Product, account, rating, timestamp and launch-behavior source | 816,216 verified downloaded rows in the current run |
+| Text training split | DistilBERT training | 49,946 rows |
+| Real validation split | Calibration and threshold selection | 9,260 rows |
+| Real test split | Final individual-review evaluation | 9,168 rows |
+| Campaign train split | Group-level hybrid campaign training | 571,312 groups |
+| Campaign validation split | Campaign threshold selection | 122,405 groups |
+| Campaign test split | Controlled campaign evaluation | 122,499 groups |
+
+Every canonical event has a stable review ID, product ID, user ID, text, rating, UTC
+timestamp, verified-purchase flag, helpful votes, language, category, source provenance,
+and label where a label is genuinely available. Temporal features are computed from past
+events only. Product launch is represented by an observed or explicitly named proxy, not
+by looking into the future.
+
+## 14. Data processing and leakage controls
+
+The processing sequence is:
+
+1. Load JSONL/CSV/Parquet sources through source-specific adapters.
+2. Map aliases into the canonical ecommerce review schema.
+3. Normalize Unicode text, whitespace, IDs, ratings, languages, and UTC timestamps.
+4. Fill safe metadata defaults and reject malformed or duplicate records.
+5. Build product profiles and event-time aggregates from observed history.
+6. Generate controlled scenarios with deterministic seeds and provenance fields.
+7. Split text by normalized-text hash and campaign data by complete scenario group.
+8. Fit calibration, normalization, and class-weight parameters on training/validation data.
+9. Evaluate the untouched test split only after trial selection.
+
+The split guard stores pairwise-disjoint normalized-text SHA-256 sets. Campaign groups are
+never divided across train, validation, and test. Future timestamps, scenario IDs,
+expected labels, and post-event aggregates are excluded from model inputs. Synthetic text
+is limited to the training policy; final evaluation is not augmented with generated text.
+
+## 15. Model development and experiment tracking
+
+The baseline is a class-balanced Logistic Regression over TF-IDF unigrams/bigrams and
+interpretable style indicators such as repetition, uppercase ratio, punctuation density,
+and promotional terms. It is fast and useful as a regression/fallback model.
+
+The promoted review model fine-tunes DistilBERT. Ray Tune explores learning rate, weight
+decay, dropout, batch size, maximum tokens, frozen encoder layers, warm-up, gradient
+clipping, label smoothing, class-weight multiplier, and epochs. The best trial is chosen
+using validation PR-AUC. Temperature scaling and a validation-derived threshold are
+stored in `bundle.json`; the current threshold is approximately 0.7606.
+
+The hybrid campaign model encodes up to six review texts and fuses the embedding with
+numeric group features: review count, user/product uniqueness, duration, review rate,
+inter-arrival statistics, rating concentration, verification ratio, helpful votes,
+off-hour/weekend activity, and launch proximity. This model is not interchangeable with
+the individual review classifier.
+
+Ray provides distributed trial execution and checkpoint/resume. MLflow records the same
+trial parameters, metrics, lineage tags, and selected model artifact. The Ray dashboard
+shows scheduling and resource usage; MLflow is the authoritative experiment and registry
+view.
+
+### Measured result from the promoted review trial
+
+| Metric | Value |
+|---|---:|
+| PR-AUC | 0.9353 |
+| ROC-AUC | 0.9215 |
+| F1 | 0.8308 |
+| Precision | 0.8005 |
+| Recall | 0.8635 |
+| Brier score | 0.1305 |
+| Log loss | 0.4443 |
+| Epochs | 2 |
+| Encoder | `distilbert-base-uncased` |
+| Maximum tokens | 192 |
+
+The repository also contains `reports/generated/baseline_metrics.json`. Its current
+internal holdout contains only four records and reports 1.0 for several metrics; it is a
+smoke artifact, not a statistically meaningful generalization claim. Before final
+submission, regenerate the baseline on the same complete real-only test split and add the
+baseline row beside the DistilBERT row. This avoids presenting a tiny smoke result as a
+production comparison.
+
+Controlled campaign trials can also produce perfect scores because their scenarios are
+explicitly generated and separated by group. Those scores validate pipeline wiring and
+campaign-feature behavior, not real-world prevalence or causal truth.
+
+## 16. API and user interface
+
+The FastAPI application serves the static console and these major endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /v1/reviews/score` | Score one review with DistilBERT and campaign context |
+| `POST /v1/demo/replay` | Replay controlled campaign events for demonstration |
+| `GET /v1/campaigns` | List campaign evidence |
+| `POST /v1/campaigns/{id}/decision` | Authorized moderator decision |
+| `GET /v1/ops/summary` | Allow-listed service and lineage status |
+| `GET /v1/monitoring` | Operational summary metrics |
+| `GET /v1/lineage` | Current code/model/data/schema lineage |
+| `GET /health/live` and `/health/ready` | Liveness and model readiness |
+| `GET /metrics` | Prometheus exposition |
+
+The primary UI flow visibly validates input, analyzes language, creates embeddings, loads
+behavior, searches similar reviews, calculates review risk, checks campaign membership,
+and returns evidence. Review text is inserted with DOM text APIs, never raw HTML. The UI
+shows a warning that risk is evidence for human review and not proof of deception.
+
+## 17. Deployment strategy
+
+For local execution, Docker Compose mounts the final model bundle read-only at
+`/models/review_distilbert`. The API loads the bundle lazily on the first score and then
+reuses it for warm inference. MLflow is available at host port 5001, Grafana at 3000,
+Prometheus at 9090, and the Ray dashboard at 8265.
+
+The production Kubernetes manifest specifies three API replicas, resource limits,
+readiness/liveness probes, an HPA, a disruption budget, non-root execution, and immutable
+Git-SHA image references. Model artifact provisioning must be configured for the target
+cluster (for example, a protected object-store download or model PVC); the image should
+not silently fall back to an untracked model in production.
+
+## 18. Monitoring and responsible operation
+
+Prometheus tracks throughput, latency, errors, prediction counts, campaign alerts, and
+resource signals. Grafana presents dashboards. Kafka lag and Spark checkpoint age detect
+streaming failure. Logs can be shipped to Elastic/Kibana. Evidently consumes reference and
+current feature/embedding distributions for drift reports.
+
+Initial alert thresholds are p95 latency above 150 ms, API errors above 1%, Kafka lag
+beyond the processing window, any model version mismatch, significant drift, campaign
+alert spikes, moderator dismissal spikes, and GPU saturation. These are operational
+triggers, not automatic enforcement rules. A campaign must be confirmed by an authorized
+moderator before a temporary soft limit is applied.
+
+## 19. CI/CD and reproducibility
+
+A pull request runs installation, smoke training, Airflow compilation, Ruff, tests,
+Docker BuildKit, and Trivy. A semantic release tag builds and publishes a Git-SHA image,
+scans it, renders Kubernetes manifests, deploys staging, waits for rollout, and calls
+`/health/ready`. Git stores source and metadata; DVC stores large content; MLflow stores
+experiments and model versions.
+
+The reproducible order is: obtain pinned source data, run the dataset command with the
+recorded seed, validate manifests and split guards, run baseline and Ray training, inspect
+MLflow, publish the bundle, start the API, run smoke/load tests, and observe before any
+promotion. Commands are consolidated in `docs/END_TO_END_RUNBOOK.md`.
+
+## 20. Challenges and lessons learned
+
+The main engineering challenges were large Amazon downloads and disk pressure, temporal
+leakage, Ray memory pressure on a laptop, Windows execution-policy restrictions, model
+cold-start latency, and keeping local Docker service status distinct from production
+health. The solutions were bounded/resumable downloads, past-only features, group-safe
+splits, four-gigabyte Ray shared memory, checkpoint resume, explicit container service
+names, lazy model loading, and allow-listed operations endpoints.
+
+The project also exposed an important modeling lesson: review language alone cannot
+identify a campaign. Time, account behavior, product overlap, rating concentration, and
+semantic similarity must be combined at the group level. Conversely, numeric campaign
+features should not be silently appended to the individual text classifier because that
+would change its decision semantics and create difficult leakage boundaries.
+
+## 21. Future improvements
+
+1. Collect moderator-confirmed campaign labels and evaluate on a real-world temporal holdout.
+2. Regenerate the full baseline comparison on the final real-only test split.
+3. Provision model artifacts through a secured MLflow/object-storage Kubernetes init flow.
+4. Add multilingual encoders and language-specific calibration.
+5. Add a privacy-reviewed account graph feature store and online feature freshness checks.
+6. Add shadow-mode canary evaluation and automated rollback gates.
+7. Add cost-sensitive thresholding using moderator workload and false-alert costs.
+8. Expand load testing to verify the target throughput and latency under realistic hardware.
+
+## 22. Conclusion
+
+Bot Review Campaign Detection demonstrates a complete production-style MLOps workflow for
+ecommerce trust. The architecture separates individual review triage from coordinated
+campaign evidence, uses event-time data engineering for behavior, tracks experiments and
+lineage, serves a real model through FastAPI and Docker, and exposes operational health
+through monitoring and CI/CD. Its measured DistilBERT result is strong on the available
+held-out data, while the report explicitly identifies controlled-data and ground-truth
+limitations. This separation between what is measured, what is simulated, and what still
+requires production validation is central to responsible deployment.

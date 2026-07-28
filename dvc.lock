@@ -1,0 +1,78 @@
+schema: '2.0'
+stages:
+  build_dataset_bundle:
+    cmd: python -m bot_campaign.cli build-dataset-bundle --labeled-input 
+      data/raw/product_reviews.jsonl data/raw/kaggle_fake_reviews 
+      --behavioral-input data/raw/amazon_all_beauty_sample.jsonl --output-dir 
+      data/processed/dataset_bundle --augmentation-count 7000 
+      --campaign-scenario-count 2000 --max-synthetic-fraction 0.25 --seed 42
+    deps:
+    - path: data/raw/amazon_all_beauty_sample.jsonl
+      hash: md5
+      md5: 603eb920632401e386780fe075e56254
+      size: 72718
+    - path: data/raw/kaggle_fake_reviews/fake reviews dataset.csv
+      hash: md5
+      md5: 177a386fab45e3f85d140728b2387967
+      size: 15324616
+    - path: data/raw/product_reviews.jsonl
+      hash: md5
+      md5: 74a49eba495e17c900be49d02a70ecb3
+      size: 8398562
+    - path: src/bot_campaign/data.py
+      hash: md5
+      md5: ea56bbaab52e069d44b0b58844b33b50
+      size: 5880
+    - path: src/bot_campaign/dataset_bundle.py
+      hash: md5
+      md5: ea359fb2cb6d9d8d0809a51eb3ec98e3
+      size: 6132
+    - path: src/bot_campaign/labeled_datasets.py
+      hash: md5
+      md5: c3520bce30c9bf7eb1c05a9fdb365740
+      size: 10444
+    - path: src/bot_campaign/synthetic.py
+      hash: md5
+      md5: 98baeb7cd32f1dc6695507a0e7965927
+      size: 6609
+    - path: src/bot_campaign/temporal.py
+      hash: md5
+      md5: 8286183e9a265eddea624711b62c5e78
+      size: 29828
+    outs:
+    - path: data/processed/dataset_bundle
+      hash: md5
+      md5: 08d2aaf1bbea8ba74b0016126f1bb85b.dir
+      size: 95516307
+      nfiles: 17
+  build_temporal_bundle:
+    cmd: python -m bot_campaign.cli build-temporal-bundle --behavioral-input 
+      data/raw/amazon_all_beauty_sample.jsonl --output-dir 
+      data/processed/temporal_bundle --campaign-scenario-count 2000 --seed 42
+    deps:
+    - path: data/raw/amazon_all_beauty_sample.jsonl
+      hash: md5
+      md5: 603eb920632401e386780fe075e56254
+      size: 72718
+    - path: src/bot_campaign/cli.py
+      hash: md5
+      md5: 9270762b1e8bf5ff0d3e58fa8b385f2d
+      size: 9354
+    - path: src/bot_campaign/data.py
+      hash: md5
+      md5: ea56bbaab52e069d44b0b58844b33b50
+      size: 5880
+    - path: src/bot_campaign/dataset_bundle.py
+      hash: md5
+      md5: ea359fb2cb6d9d8d0809a51eb3ec98e3
+      size: 6132
+    - path: src/bot_campaign/temporal.py
+      hash: md5
+      md5: 8286183e9a265eddea624711b62c5e78
+      size: 29828
+    outs:
+    - path: data/processed/temporal_bundle
+      hash: md5
+      md5: c8b18c2c63564fba5caa5bd994a7a4b9.dir
+      size: 3195287
+      nfiles: 9

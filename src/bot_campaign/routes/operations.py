@@ -5,7 +5,6 @@ from ..observability import prometheus_text
 from ..runtime import TrustRuntime
 from .dependencies import runtime
 
-
 router = APIRouter(tags=["operations"])
 
 
@@ -18,7 +17,13 @@ def live(service: TrustRuntime = Depends(runtime)):
 def ready(service: TrustRuntime = Depends(runtime)):
     if not service.model_ready:
         raise HTTPException(status_code=503, detail="Model artifact is unavailable")
-    return {"status": "ready", "model_path": service.settings.model_path.name}
+    transformer = service.settings.review_transformer_path
+    active_path = transformer if (transformer / "bundle.json").exists() else service.settings.model_path
+    return {
+        "status": "ready",
+        "model_path": str(active_path),
+        "model_version": service.model_version,
+    }
 
 
 @router.get("/v1/operations", include_in_schema=False)

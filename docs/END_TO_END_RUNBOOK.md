@@ -183,6 +183,8 @@ docker compose ps
 | Prometheus metrics | http://localhost:8000/metrics |
 | Prometheus dashboard | http://localhost:9090 |
 | Grafana | http://localhost:3000 |
+| Elasticsearch | http://localhost:9200 |
+| Kibana | http://localhost:5601 |
 
 Verify the API:
 
@@ -195,7 +197,37 @@ Open the UI, click **Scan review**, then click **Replay campaign**. Confirm the 
 result contains `review-risk-distilbert-v1` and campaign replay contains
 `hybrid-distilbert`.
 
-## 8. Start Kafka and Spark streaming
+## 8. Kibana and log observability
+
+Kibana is provided through the optional `observability` Compose profile. Elasticsearch
+stores indexed events and Kibana provides search, dashboards, and saved views over those
+events. Start the local stack with:
+
+```powershell
+docker compose --profile observability up -d elasticsearch kibana
+docker compose ps elasticsearch kibana
+```
+
+Open `http://localhost:5601`. Check Elasticsearch first with
+`Invoke-RestMethod http://localhost:9200/_cluster/health`.
+
+This Compose profile intentionally disables Elasticsearch security for a local demo and
+stores data in the `elasticsearch-data` volume. Production must enable TLS, authentication,
+role-based access, and a managed secret; do not expose this development profile publicly.
+
+The local API currently writes operational output to container stdout, so
+`docker compose logs -f api` is the immediate local log view. To populate Kibana, deploy
+Elastic Agent/Filebeat or Logstash to read Docker JSON logs, add `service`, `environment`,
+`git_commit`, `model_version`, and `request_id`, and write to an index such as
+`bot-campaign-logs-*`. In Kubernetes, use an Elastic Agent DaemonSet or Elastic
+container-log integration; do not mount the Docker socket into the public API container.
+
+Recommended Kibana fields are `@timestamp`, `log.level`, `service.name`, `http.route`,
+`http.status_code`, `duration_ms`, `model_version`, `campaign_id`, `review_id`, and
+`error.type`. Kibana is for log investigation; Prometheus/Grafana remains the source for
+numeric latency, throughput, error-rate, resource, drift, and Kafka-lag alerts.
+
+## 9. Start Kafka and Spark streaming
 
 ```powershell
 docker compose up -d kafka spark-master spark-worker
@@ -229,7 +261,7 @@ Spark UI is http://localhost:8082. The topic flow is:
 reviews.raw.v1 → reviews.analysis-windows.v1 → reviews.campaign-scores.v1
 ```
 
-## 9. Airflow scheduled execution
+## 10. Airflow scheduled execution
 
 ```powershell
 docker compose -f orchestration/docker-compose.airflow.yml up airflow-init
@@ -241,7 +273,53 @@ Open http://localhost:8080 and trigger `bot_campaign_model_retraining`. Configur
 full scheduled run. Airflow writes candidates under `artifacts/candidates/`; it never
 automatically replaces production bundles.
 
-## 10. Ray out-of-memory recovery
+## 11. Kubernetes deployment
+
+The Kubernetes implementation is in `k8s/base.yaml`, and the Argo CD application is in
+`deploy/argocd-application.yaml`. The manifest provides a `bot-campaign` namespace,
+three API replicas, readiness/liveness probes, resource limits, an HPA, and a pod
+disruption budget. It uses an immutable Git-SHA image placeholder:
+
+`ghcr.io/njchathura-boop/bot-review-campaign:REPLACE_WITH_GIT_SHA`
+
+For a configured cluster, apply and inspect it with:
+
+```powershell
+kubectl apply -f k8s/base.yaml
+kubectl -n bot-campaign rollout status deployment/bot-campaign-api --timeout=180s
+kubectl -n bot-campaign get pods,svc,hpa
+```
+
+For Argo CD, apply `deploy/argocd-application.yaml` from the Argo CD control plane. Argo
+CD watches the repository revision and reconciles the `k8s/` directory. The public UI
+cannot mutate Kubernetes. Production must provision the trained model bundle through a
+protected object-store download, model PVC, or equivalent init process before readiness
+can succeed; the image must not silently use an untracked fallback model.
+
+## 12. CI/CD integration
+
+CI is `.github/workflows/ci.yml`. Pull requests run dependency installation, smoke
+training, Airflow DAG compilation, Ruff, tests, Docker BuildKit, and Trivy image scanning.
+The workflow blocks merging when quality or security gates fail.
+
+CD is `.github/workflows/cd.yml`. A `v*` tag or manual workflow dispatch builds and pushes
+an immutable Git-SHA image to GHCR, scans it, renders `k8s/base.yaml`, deploys the staging
+environment, waits for the API rollout, and calls `/health/ready` from inside the cluster.
+
+Configure a protected GitHub environment named `staging` with a base64-encoded
+`KUBE_CONFIG_DATA` secret. Release with:
+
+```powershell
+git switch main
+git pull --ff-only
+git tag -a v1.1.0 -m "Bot campaign detection v1.1.0"
+git push origin v1.1.0
+```
+
+Inspect GitHub **Actions -> cd** for the image digest, rollout, and smoke-test result.
+Rollback Kubernetes with `kubectl -n bot-campaign rollout undo deployment/bot-campaign-api`.
+
+## 13. Ray out-of-memory recovery
 
 The message `ray::IDLE` followed by `RayOutOfMemoryError` means the Docker memory pool
 was exhausted. It is not a model-code error.
@@ -274,7 +352,7 @@ Then:
 Do not disable Ray's memory monitor or start several full training jobs at once. Stop a
 stale job from the Ray dashboard before retrying.
 
-## 11. Final acceptance checklist
+## 14. Final acceptance checklist
 
 - MLflow contains completed selected runs and registered model versions.
 - Both model `bundle.json` files exist.
@@ -282,5 +360,184 @@ stale job from the Ray dashboard before retrying.
 - UI review scan returns the DistilBERT version.
 - UI campaign replay returns the hybrid campaign engine.
 - Prometheus shows request and latency metrics.
+- Grafana shows the Prometheus data source and operational panels.
+- Kibana opens when the observability profile is enabled and receives events after a log
+  shipper is configured.
 - Kafka/Spark logs show processed events and no checkpoint errors.
+- Kubernetes rollout and the GitHub Actions CD smoke test succeed in staging.
 - Production predictions contain Git, model, data, feature, schema, and image lineage.
+
+## 15. Presenter-ready demonstration (10 minutes)
+
+Use this section as the live demonstration script. A demo should use the already
+generated datasets and trained model bundles. Do not start a 20-trial, full-data Ray
+run during a ten-minute presentation; show the completed MLflow run and use the UI,
+streaming, and monitoring services live.
+
+### 15.1 Before the audience arrives (one-time preparation)
+
+Run these commands from the repository root and wait until every service is healthy:
+
+```powershell
+docker compose up -d api mlflow prometheus grafana
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ray-head ray-worker
+docker compose up -d kafka spark-master spark-worker
+docker compose --profile stream up -d spark-stream
+docker compose --profile score up -d campaign-scorer
+docker compose --profile observability up -d elasticsearch kibana
+docker compose ps
+```
+
+The optional Airflow stack is started separately:
+
+```powershell
+docker compose -f orchestration/docker-compose.airflow.yml up airflow-init
+docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-scheduler airflow-api-server
+```
+
+Check the two model bundles and the API before presenting:
+
+```powershell
+Test-Path artifacts/review_distilbert/bundle.json
+Test-Path artifacts/campaign_model/bundle.json
+Invoke-RestMethod http://localhost:8000/health/ready
+Invoke-RestMethod http://localhost:8000/v1/ops/summary
+```
+
+If either bundle is missing, complete sections 4--6 first. For a reliable demo, keep
+the following browser tabs open: UI (`8000`), MLflow (`5001`), Grafana (`3000`), Ray
+Dashboard (`8265`), Airflow (`8080`), Spark UI (`8082`), and Kibana (`5601`).
+
+### 15.2 Demo sequence and speaking notes
+
+| Time | What to do | What to explain | Evidence to point at |
+|---:|---|---|---|
+| 0:00--0:45 | Open the UI home page | This is an ecommerce trust workflow, not an automatic ban system. Individual review risk is evidence for a moderator; campaign risk is calculated separately. | API healthy badge, review/campaign counters, navigation tabs |
+| 0:45--2:30 | Select a genuine example and click **Scan review** | The API validates the payload, runs the DistilBERT text model, computes behavioral features, searches recent context, and returns model/data/schema lineage. | Animated stages, risk percentage, confidence, latency, model version, evidence list |
+| 2:30--3:45 | Select a promotional or coordinated example and scan it | Similar language alone is not proof. The result combines language, timing, account/product behavior, rating burst, and campaign evidence. | Risk badge, similar-review count, temporal evidence, campaign link |
+| 3:45--4:30 | Click **Replay campaign** | Replay publishes held-out events to Kafka. Spark Structured Streaming builds time windows and cross-product graph candidates; the campaign scorer writes the result back to Kafka/API. | Replay progress, campaign result, `reviews.campaign-scores.v1` messages |
+| 4:30--5:15 | Open the Campaigns page | A campaign is a coordinated group, not a single suspicious review. Moderators can confirm, dismiss, or restore visibility; the model never enforces a soft limit by itself. | Campaign ID, products, accounts, timeline, similarity, burst intensity, decision state |
+| 5:15--6:00 | Open Deployment | FastAPI serves predictions; Kafka transports events; Spark aggregates streaming behavior; MLflow stores models; PostgreSQL/Redis/MinIO provide state and artifacts. | Service cards, image/Git SHA, readiness, deployment timestamp |
+| 6:00--6:45 | Open Monitoring and Grafana | Prometheus scrapes numeric metrics, Grafana visualizes them, and alerts cover latency, errors, lag, drift, and resource saturation. | p95 latency, throughput, error rate, consumer lag, drift panels |
+| 6:45--7:30 | Open Kibana | Elastic is for searchable structured logs. It is intentionally separate from Prometheus: metrics answer “how much/how fast,” logs answer “which request and error.” | `bot-campaign-logs-*`, request ID, route, status, model version |
+| 7:30--8:15 | Open MLflow and Ray Dashboard | Ray Tune explores hyperparameters in parallel and reports metrics; MLflow records each trial/selected run and registers the reproducible model. | Experiment name, trial metrics, selected run, model version, Ray resources |
+| 8:15--9:00 | Open Airflow | Airflow is the scheduler and dependency manager. It runs data validation, feature generation, training, evaluation, and promotion checks on a schedule; it does not replace Kafka or Spark. | DAG graph, task logs, run state, candidate output directory |
+| 9:00--9:40 | Show GitHub Actions and version history | A pull request runs tests/security checks. A release tag builds an immutable Git-SHA image and deploys staging through Argo CD/Kubernetes. DVC tracks data manifests; MLflow tracks model artifacts. | CI green checks, image tag/digest, commit SHA, DVC hash, lineage table |
+| 9:40--10:00 | State safeguards and close | Human review is required for enforcement, synthetic data is capped, test data is real-only, and rollback is available for both image and model. | Responsible-AI notice, acceptance checklist, rollback command |
+
+### 15.3 Live commands to support the demo
+
+Use these only when you need terminal evidence during the presentation:
+
+```powershell
+# One-line service and health view
+docker compose ps
+docker compose -f orchestration/docker-compose.airflow.yml ps
+Invoke-RestMethod http://localhost:8000/health/ready
+
+# API and streaming logs
+docker compose logs --tail 40 api
+docker compose logs --tail 40 spark-stream campaign-scorer
+
+# Show a Kafka score event
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh `
+  --bootstrap-server kafka:29092 `
+  --topic reviews.campaign-scores.v1 `
+  --from-beginning --max-messages 3
+
+# Show current resource usage without changing anything
+docker stats --no-stream
+```
+
+To generate a small, deterministic streaming demonstration, use a held-out file and
+rate-limit it so the audience can see the stages:
+
+```powershell
+python streaming/producer.py `
+  --input data/processed/temporal_bundle/campaign_v3/test.jsonl `
+  --bootstrap-servers localhost:9092 `
+  --rate 10
+```
+
+### 15.4 What each project component does
+
+| Component | Responsibility in this project | The sentence to say in the demo |
+|---|---|---|
+| Git/GitHub | Source history, pull requests, release tags, rollback point | “Every code and configuration change has an auditable commit.” |
+| DVC + MinIO | Content-addressed dataset/manifests and reproducible pipeline inputs | “The data version is pinned independently from the code version.” |
+| Airflow | Scheduled orchestration and task dependencies | “Airflow decides when the pipeline runs and in what order.” |
+| Kafka | Durable event transport between producers, Spark, and scorers | “Kafka decouples ingestion from online processing and absorbs bursts.” |
+| Spark Structured Streaming | Time windows, feature aggregation, and cross-product graph candidates | “Spark turns individual events into campaign-level behavioral evidence.” |
+| Great Expectations | Schema, null, range, and freshness checks | “Bad data is rejected before it reaches training or scoring.” |
+| DistilBERT | Transformer text classifier for individual review risk | “The text model captures wording and semantic patterns beyond keyword counts.” |
+| Numeric/behavior model | Rating, verification, helpful votes, timing, burst, and account/product signals | “Non-text behavior gives context that language alone cannot provide.” |
+| Hybrid campaign detector | Combines text similarity, temporal behavior, and graph connectivity | “Campaign risk is group evidence, not a single-review accusation.” |
+| Ray Tune | Distributed hyperparameter search and checkpoint recovery | “Ray compares many valid configurations while using the GPU efficiently.” |
+| MLflow | Experiment tracking, metrics, artifacts, registry, and lineage | “The exact model used by the UI can be traced to its training run.” |
+| FastAPI | Versioned scoring, replay, health, metrics, and lineage endpoints | “FastAPI is the controlled contract between models and the UI.” |
+| Docker Compose | Repeatable local service environment | “Compose makes the complete stack reproducible on one machine.” |
+| Kubernetes | Production replicas, probes, autoscaling, disruption protection | “Kubernetes keeps the API available and scales it under load.” |
+| Argo CD | GitOps reconciliation of Kubernetes manifests | “The cluster continuously converges to the reviewed Git state.” |
+| Prometheus | Time-series scraping and alert rules | “Prometheus detects numeric operational failures.” |
+| Grafana | Dashboards over Prometheus (and optional data sources) | “Grafana makes health and performance visible to operators.” |
+| Elastic/Kibana | Indexed structured logs and investigation/search | “Kibana answers which request, review, or error caused an incident.” |
+| Evidently | Feature, embedding, prediction, and data-drift reports | “Drift tells us when production behavior no longer matches training.” |
+| Trivy + RBAC/Vault | Image scanning, least privilege, and secret handling | “Security checks run before deployment and secrets are not in the UI.” |
+
+### 15.5 Explain the end-to-end data path
+
+Use this short narrative while showing the architecture diagram:
+
+```text
+Raw Amazon/product reviews
+  -> Airflow ingestion and Great Expectations checks
+  -> Spark batch cleaning/features + DVC/MinIO versioned bundle
+  -> Ray Tune trains DistilBERT and hybrid campaign models
+  -> MLflow records runs and registers approved bundles
+  -> FastAPI loads the immutable bundles for UI/API scoring
+  -> Kafka carries replay/live events
+  -> Spark Streaming creates temporal and cross-product candidates
+  -> Campaign scorer returns group-level evidence
+  -> Prometheus/Grafana monitor metrics; Elastic/Kibana investigates logs
+  -> GitHub Actions/Argo CD promote the tested image to Kubernetes
+```
+
+Emphasize the two different decisions: the review model estimates the risk of one
+review, while the campaign model estimates coordinated activity across reviews,
+accounts, products, and time. Only authorized human moderators can make an enforcement
+decision.
+
+### 15.6 If a service is unavailable during the demo
+
+Do not improvise a success state. Show the actual status and explain the dependency:
+
+```powershell
+docker compose ps
+docker compose logs --tail 80 <service-name>
+Invoke-RestMethod http://localhost:8000/health/ready
+```
+
+Typical explanations:
+
+- `NOT_CONFIGURED` Kafka/Spark/Kubernetes: those services were not started in the
+  current local profile; the review UI can still demonstrate individual scoring.
+- Kibana has no data: Elasticsearch/Kibana are running, but a log shipper has not sent
+  container logs to `bot-campaign-logs-*`; use `docker compose logs -f api` locally.
+- Model unavailable: the model bundle is not mounted or its checksum/version does not
+  match; do not hide this with a fallback model.
+- Ray job still running: show the Ray Dashboard job and explain trial status, rather
+  than starting a second training job.
+- Airflow is slow to start: wait for the API-server health check and show the DAG run
+  state; Airflow is intentionally separate from the low-latency API path.
+
+### 15.7 Presenter closing checklist
+
+- [ ] UI scan completed for a genuine and coordinated example.
+- [ ] Campaign replay produced a Kafka/Spark score event.
+- [ ] Model and campaign results were shown separately.
+- [ ] MLflow selected run and Ray trial table were shown.
+- [ ] Grafana metrics and at least one operational panel were shown.
+- [ ] Kibana availability/log-ingestion limitation was explained accurately.
+- [ ] Airflow DAG and scheduler role were shown.
+- [ ] GitHub Actions, DVC, Docker image SHA, and Kubernetes/Argo CD path were shown.
+- [ ] Responsible-AI and human-moderation safeguards were stated.

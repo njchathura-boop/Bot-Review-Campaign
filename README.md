@@ -49,6 +49,8 @@ Airflow setup and its ETL → Ray task sequence are in
 [`orchestration/README.md`](orchestration/README.md).
 The single command-by-command execution guide is
 [`docs/END_TO_END_RUNBOOK.md`](docs/END_TO_END_RUNBOOK.md).
+The complete technology, script-call, trigger-command, streaming, deployment, and
+troubleshooting guide is [`docs/COMPLETE_PROJECT_GUIDE.md`](docs/COMPLETE_PROJECT_GUIDE.md).
 
 ## Data architecture
 

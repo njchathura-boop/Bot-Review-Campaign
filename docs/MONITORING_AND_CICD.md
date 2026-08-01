@@ -31,6 +31,13 @@ docker compose up -d api prometheus grafana mlflow
 docker compose ps
 ```
 
+Enable local Elastic/Kibana log search when indexed log investigation is required:
+
+```powershell
+docker compose --profile observability up -d elasticsearch kibana
+docker compose ps elasticsearch kibana
+```
+
 Optional streaming services:
 
 ```powershell
@@ -49,6 +56,8 @@ Local endpoints:
 | MLflow | <http://localhost:5001> |
 | Ray dashboard | <http://localhost:8265> |
 | Spark UI | <http://localhost:8082> |
+| Elasticsearch | <http://localhost:9200> |
+| Kibana | <http://localhost:5601> |
 
 The API container must mount the trained bundle:
 
@@ -64,6 +73,12 @@ Invoke-RestMethod http://localhost:8000/v1/ops/summary | ConvertTo-Json -Depth 5
 ```
 
 The readiness response should identify `review-risk-distilbert-v1`.
+
+Kibana receives logs only after an Elastic Agent/Filebeat or Logstash collector is
+configured to read container logs and index them as `bot-campaign-logs-*`. The local API
+stdout remains available through `docker compose logs`; Elasticsearch/Kibana does not
+automatically index stdout without a shipper. Prometheus/Grafana remains the source of
+numeric metrics and alert rules.
 
 ## 3. What to monitor
 

@@ -18,7 +18,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -e ".[dev,ui]"
+      - name: Install CPU PyTorch for model-backed tests
+        run: python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.4,<3"
+      - run: python -m pip install -e ".[dev,ui,nlp]"
       - run: python -m playwright install --with-deps chromium
       - run: >-
           python -m bot_campaign.cli train

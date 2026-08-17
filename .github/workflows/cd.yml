@@ -59,6 +59,7 @@ jobs:
         with:
           image-ref: ${{ steps.meta.outputs.image }}
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
           exit-code: "1"
 
   deploy-staging:

@@ -188,8 +188,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "ray status --address=127.0.0.1:6379"]
       interval: 10s
-      timeout: 10s
-      retries: 12
+      timeout: 30s
+      start_period: 90s
+      retries: 18
 
   ray-worker:
     <<: *ray-runtime

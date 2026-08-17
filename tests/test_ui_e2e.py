@@ -58,6 +58,7 @@ def test_review_scan_and_campaign_replay_in_browser():
 
         page.select_option("#example", "positive-campaign")
         page.get_by_role("button", name="Replay campaign").click()
-        page.locator(".campaign-card").wait_for()
-        assert page.locator(".campaign-card").count() >= 1
+        campaign_cards = page.locator(".campaign-card")
+        campaign_cards.first.wait_for()
+        assert campaign_cards.count() >= 1
         browser.close()

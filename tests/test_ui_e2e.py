@@ -50,6 +50,8 @@ def test_review_scan_and_campaign_replay_in_browser():
         browser = browser_api.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
         page.goto("http://127.0.0.1:8766", wait_until="networkidle")
+        assert page.title() == "Detectra | Review Intelligence"
+        assert page.locator(".brand").inner_text().startswith("DETECTRA")
 
         page.select_option("#example", "promotional")
         page.get_by_role("button", name="Scan review").click()

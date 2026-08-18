@@ -83,7 +83,7 @@ def test_cross_product_replay_uses_hybrid_campaign_model_when_loaded():
     assert any(item["evidence"].get("model") == "bot-campaign-hybrid-distilbert" for item in campaigns)
 
 
-def test_operations_never_claim_unchecked_dependencies_are_healthy():
+def test_operations_never_uses_configuration_as_a_health_status():
     response = client.get("/v1/operations")
     assert response.status_code == 200
     services = response.json()["services"]
@@ -92,4 +92,9 @@ def test_operations_never_claim_unchecked_dependencies_are_healthy():
         for item in services
         if item["name"] not in {"FastAPI", "Review model", "Campaign model"}
     ]
-    assert all(item["status"] in {"configured", "not_configured"} for item in external)
+    assert all(item["status"] != "configured" for item in external)
+    assert all(
+        item["status"]
+        in {"healthy", "running", "starting", "degraded", "unavailable", "not_configured"}
+        for item in external
+    )

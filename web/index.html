@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Ecommerce review trust and campaign detection demo">
-  <title>Northstar Trust Console</title>
+  <title>Detectra | Review Intelligence</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#scanner">NORTHSTAR <span>TRUST</span></a>
+    <a class="brand" href="#scanner">DETECTRA <span>TRUST</span></a>
     <nav aria-label="Main navigation">
       <a href="#scanner">Product &amp; Reviews</a>
       <a href="#campaigns">Live Campaigns</a>
@@ -130,23 +130,63 @@
     </section>
 
     <section id="workflow" class="section workflow">
-      <div class="section-heading"><div><p class="eyebrow">07 / HOW IT WORKS</p><h2>From commit to monitoring</h2></div></div>
-      <ol class="release-flow">
-        <li><strong>Feature branch</strong><span>Small Conventional Commits</span></li>
-        <li><strong>Pull request</strong><span>Tests, lint, scans, review</span></li>
-        <li><strong>Immutable image</strong><span>Tagged with Git SHA</span></li>
-        <li><strong>Argo CD</strong><span>Staging and canary rollout</span></li>
-        <li><strong>Observe</strong><span>Prometheus, Grafana, Kibana, drift</span></li>
-        <li><strong>Improve safely</strong><span>Approved retraining or rollback</span></li>
+      <div class="section-heading">
+        <div><p class="eyebrow">07 / LOCAL ONBOARDING</p><h2>Run Detectra on your machine</h2></div>
+        <p>A developer path from a fresh clone to a live review, streaming campaign,
+          and observable result. Training is optional for normal local serving.</p>
+      </div>
+      <ol class="onboard-flow" aria-label="Local developer setup flow">
+        <li><span class="step-number">01</span><strong>Clone + install</strong><span>Python 3.11 or 3.12, Git, DVC, and Docker Desktop</span></li>
+        <li><span class="step-number">02</span><strong>Restore data</strong><span>Configure the team DVC remote and pull, or rebuild from raw inputs</span></li>
+        <li><span class="step-number">03</span><strong>Check artifacts</strong><span>Review and campaign model folders must exist before API startup</span></li>
+        <li><span class="step-number">04</span><strong>Start the stack</strong><span>API, Kafka, Spark, scorer, MLflow, Prometheus, Grafana, and Kibana</span></li>
+        <li><span class="step-number">05</span><strong>Replay a campaign</strong><span>The UI publishes reviews and shows the scored campaign path</span></li>
+        <li><span class="step-number">06</span><strong>Verify + observe</strong><span>Read live service probes, dashboards, logs, lineage, and tests</span></li>
       </ol>
-      <pre><code>git switch -c feat/review-scanning-ui
-git add web src tests
-git commit -m "feat(ui): add live review scanning workflow"
-git push -u origin feat/review-scanning-ui
-gh pr create --fill</code></pre>
+
+      <div class="onboard-grid">
+        <article class="onboard-card quickstart-card">
+          <p class="card-kicker">FAST PATH</p>
+          <h3>Start an already-trained workspace</h3>
+          <pre><code>python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev,mlops,streaming,ui]"
+# after configuring the shared DVC remote
+python -m dvc pull
+
+docker compose --profile stream --profile observability up -d `
+  api kafka kafka-init spark-master spark-worker spark-stream `
+  campaign-scorer mlflow prometheus grafana elasticsearch kibana</code></pre>
+        </article>
+        <article class="onboard-card verify-card">
+          <p class="card-kicker">VERIFY</p>
+          <h3>Know when it is ready</h3>
+          <ul class="readiness-list">
+            <li><code>localhost:8000</code><span>Detectra UI + FastAPI</span></li>
+            <li><code>localhost:8082</code><span>Spark stream is active</span></li>
+            <li><code>localhost:5001</code><span>MLflow experiments</span></li>
+            <li><code>localhost:3000</code><span>Grafana dashboards</span></li>
+            <li><code>localhost:5601</code><span>Kibana logs</span></li>
+          </ul>
+          <pre class="compact-code"><code>docker compose ps
+Invoke-RestMethod http://localhost:8000/health/ready
+Invoke-RestMethod http://localhost:8000/v1/ops/summary</code></pre>
+        </article>
+      </div>
+
+      <aside class="space-rescue" aria-label="Safe Docker disk cleanup">
+        <div><p class="card-kicker">LOW DISK?</p><h3>Clear rebuildable Docker cache safely</h3>
+          <p>This removes unused build layers, not named volumes. Do not add
+            <code>--volumes</code> if you want to retain MLflow and monitoring history.</p></div>
+        <pre class="compact-code"><code>docker builder prune --all --force
+docker system df</code></pre>
+      </aside>
+
+      <p class="runbook-link">Need the full data-build, training, Airflow, Kubernetes,
+        CI/CD, or rollback procedure? Open <code>docs/END_TO_END_RUNBOOK.md</code>.</p>
     </section>
   </main>
-  <footer>Northstar Market · Responsible review intelligence demo · Individual risk never auto-blocks a review.</footer>
+  <footer>Detectra | Responsible review intelligence demo | Individual risk never auto-blocks a review.</footer>
   <script src="/app.js"></script>
 </body>
 </html>

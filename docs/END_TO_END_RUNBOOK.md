@@ -46,6 +46,72 @@ Test-Path data/processed/temporal_bundle/campaign_v3/train.jsonl
 Do not regenerate or redownload data if these files exist and their manifests are
 correct.
 
+### Fresh-clone developer fast path
+
+The Git repository stores code and DVC metadata, not the multi-gigabyte datasets. A new
+developer must first configure the shared DVC object-store URL supplied by the team.
+The current `local` remote points to a folder outside this repository and is only useful
+on the machine that owns that folder.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev,mlops,streaming,ui]"
+
+# Replace this URL with the actual shared S3, MinIO, Azure, GCS, or SSH remote.
+python -m dvc remote modify local url <team-dvc-storage-url>
+python -m dvc pull
+```
+
+With the trained model bundles restored, start serving, streaming, and observability in
+one command. Ray and Airflow are intentionally separate because Ray is a training
+service and Airflow is an orchestration service, not an online inference dependency.
+
+```powershell
+docker compose --profile stream --profile observability up -d `
+  api kafka kafka-init spark-master spark-worker spark-stream campaign-scorer `
+  mlflow prometheus grafana elasticsearch kibana
+```
+
+Open `http://localhost:8000` and verify actual readiness rather than only checking that
+containers exist:
+
+```powershell
+docker compose ps
+Invoke-RestMethod http://localhost:8000/health/ready
+Invoke-RestMethod http://localhost:8000/v1/ops/summary
+```
+
+### Safe recovery when Docker fills the C: drive
+
+Inspect usage first. Reclaim unused build layers, which can always be rebuilt:
+
+```powershell
+docker system df
+docker builder prune --all --force
+docker system df
+```
+
+Do not run `docker volume prune` or add `--volumes` during routine cleanup. Named
+volumes may contain MLflow, Grafana, Prometheus, Elasticsearch, PostgreSQL, and other
+persistent state. If an image is genuinely stale, `docker image prune --all --force`
+removes only images unused by containers, but those images must be downloaded or rebuilt
+later.
+
+If DVC generation completed but reported `No space left on device` while caching output,
+do not regenerate the dataset. On NTFS, complete the cache using machine-local hard
+links and verify the stage:
+
+```powershell
+python -m dvc config --local cache.type hardlink,copy
+python -m dvc commit --force build_temporal_bundle
+python -m dvc status build_temporal_bundle
+```
+
+The expected final message is `Data and pipelines are up to date.` Commit `dvc.lock` to
+Git, then use `python -m dvc push` only after the shared remote has enough free capacity.
+
 If the laptop or Docker restarts during Ray Tune, keep the existing
 `artifacts/ray_results/review-risk-distilbert` directory. Use the review command in
 section 4 with `--resume`; completed trials are retained and unfinished trials restore
@@ -402,16 +468,19 @@ streaming, and monitoring services live.
 
 ### 15.1 Before the audience arrives (one-time preparation)
 
-Run these commands from the repository root and wait until every service is healthy:
+Run this command from the repository root and wait until the readiness checks succeed:
 
 ```powershell
-docker compose up -d api mlflow prometheus grafana
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ray-head ray-worker
-docker compose up -d kafka spark-master spark-worker
-docker compose --profile stream up -d spark-stream
-docker compose --profile score up -d campaign-scorer
-docker compose --profile observability up -d elasticsearch kibana
+docker compose --profile stream --profile observability up -d `
+  api kafka kafka-init spark-master spark-worker spark-stream campaign-scorer `
+  mlflow prometheus grafana elasticsearch kibana
 docker compose ps
+```
+
+Start Ray only if the demonstration includes the training dashboard:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d ray-head ray-worker
 ```
 
 The optional Airflow stack is started separately:

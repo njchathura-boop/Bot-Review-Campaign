@@ -18,6 +18,7 @@ RUN python -m pip install \
       --index-url https://download.pytorch.org/whl/cpu \
       "torch>=2.4,<3" && \
     python -m pip install ".[nlp]" && \
+    python -m pip install --upgrade "wheel>=0.46.2" "jaraco.context>=6.1.0" && \
     mkdir -p artifacts && \
     chown -R app:app /app
 

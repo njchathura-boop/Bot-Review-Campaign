@@ -30,6 +30,11 @@ class Settings:
     grafana_url: str
     mlflow_url: str
     campaign_candidate_limit: int
+    streaming_enabled: bool
+    kafka_bootstrap_servers: str
+    raw_reviews_topic: str
+    campaign_scores_topic: str
+    campaign_alert_group_id: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -68,5 +73,17 @@ class Settings:
             mlflow_url=os.getenv("MLFLOW_URL", "http://localhost:5001"),
             campaign_candidate_limit=max(
                 20, min(int(os.getenv("CAMPAIGN_CANDIDATE_LIMIT", "100")), 500)
+            ),
+            streaming_enabled=os.getenv("CAMPAIGN_ALERTS_ENABLED", "false").lower()
+            in {"1", "true", "yes", "on"},
+            kafka_bootstrap_servers=os.getenv(
+                "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
+            ),
+            raw_reviews_topic=os.getenv("KAFKA_RAW_REVIEWS_TOPIC", "reviews.raw.v1"),
+            campaign_scores_topic=os.getenv(
+                "KAFKA_CAMPAIGN_SCORES_TOPIC", "reviews.campaign-scores.v1"
+            ),
+            campaign_alert_group_id=os.getenv(
+                "KAFKA_CAMPAIGN_ALERT_GROUP_ID", "campaign-api-materializer-v1"
             ),
         )

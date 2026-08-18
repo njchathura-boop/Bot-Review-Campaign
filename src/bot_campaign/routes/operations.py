@@ -19,10 +19,17 @@ def ready(service: TrustRuntime = Depends(runtime)):
         raise HTTPException(status_code=503, detail="Model artifact is unavailable")
     transformer = service.settings.review_transformer_path
     active_path = transformer if (transformer / "bundle.json").exists() else service.settings.model_path
+    stream = service.monitoring()["streaming"]
+    if service.settings.streaming_enabled and stream["state"] == "failed":
+        raise HTTPException(
+            status_code=503,
+            detail=f"Campaign stream consumer failed: {stream['last_error']}",
+        )
     return {
         "status": "ready",
         "model_path": str(active_path),
         "model_version": service.model_version,
+        "campaign_stream": stream["state"],
     }
 
 

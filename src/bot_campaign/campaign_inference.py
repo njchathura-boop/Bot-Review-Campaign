@@ -30,6 +30,13 @@ def score_campaign_window(
             "feature_version": scorer.config.feature_version,
             "group_id": group.group_id,
             "review_ids": list(group.review_ids),
+            "user_ids": sorted(
+                {
+                    str(events[index]["user_id"])
+                    for index in indices
+                    if events[index].get("user_id") is not None
+                }
+            ),
             "product_ids": list(group.product_ids),
             "campaign_scope": "cross_product" if len(group.product_ids) > 1 else "single_product",
             "window_start": group.window_start,
@@ -40,6 +47,13 @@ def score_campaign_window(
             "semantic_edge_threshold": similarity_threshold,
             "model_name": "bot-campaign-hybrid-distilbert",
             "source_window_truncated": bool(message.get("truncated", False)),
+            "replay_job_ids": sorted(
+                {
+                    str(events[index]["replay_job_id"])
+                    for index in indices
+                    if events[index].get("replay_job_id")
+                }
+            ),
         }
-        for group, risk in zip(groups, risks)
+        for (group, indices), risk in zip(discovered, risks)
     ]

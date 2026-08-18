@@ -230,18 +230,28 @@ numeric latency, throughput, error-rate, resource, drift, and Kafka-lag alerts.
 ## 9. Start Kafka and Spark streaming
 
 ```powershell
-docker compose up -d kafka spark-master spark-worker
-docker compose --profile stream up -d spark-stream
-docker compose --profile score up -d campaign-scorer
+docker compose --profile stream up -d --build `
+  kafka kafka-init spark-master spark-worker spark-stream campaign-scorer api
 ```
 
-Replay held-out events:
+Trigger the complete cross-product path through the API:
 
 ```powershell
-python streaming/producer.py `
-  --input data/processed/temporal_bundle/campaign_v3/test.jsonl `
-  --bootstrap-servers localhost:9092 `
-  --rate 100
+$body = @{
+  scenario = "coordinated-cross-product"
+  mode = "stream"
+} | ConvertTo-Json
+
+$job = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8000/v1/demo/replay" `
+  -ContentType "application/json" -Body $body
+
+do {
+  Start-Sleep -Seconds 5
+  $result = Invoke-RestMethod `
+    -Uri "http://localhost:8000/v1/demo/replay/$($job.job_id)"
+  $result
+} while ($result.status -eq "queued")
 ```
 
 Inspect output:
@@ -261,6 +271,11 @@ Spark UI is http://localhost:8082. The topic flow is:
 reviews.raw.v1 → reviews.analysis-windows.v1 → reviews.campaign-scores.v1
 ```
 
+FastAPI consumes `reviews.campaign-scores.v1`, validates its schema, and idempotently
+materializes candidates for `/v1/campaigns` and the campaign UI. Detailed topic
+ownership, dead-letter handling, processing guarantees, and troubleshooting are in
+`docs/LIVE_STREAMING_PIPELINE.md`.
+
 ## 10. Airflow scheduled execution
 
 ```powershell
@@ -272,6 +287,17 @@ Open http://localhost:8080 and trigger `bot_campaign_model_retraining`. Configur
 `BOT_CAMPAIGN_BEHAVIORAL_INPUTS` and `BOT_CAMPAIGN_CAMPAIGN_SCENARIO_COUNT` before a
 full scheduled run. Airflow writes candidates under `artifacts/candidates/`; it never
 automatically replaces production bundles.
+
+To make Airflow trigger a bounded end-to-end streaming verification, enable and trigger
+`bot_campaign_streaming_smoke`. From PowerShell:
+
+```powershell
+docker compose -f orchestration/docker-compose.airflow.yml exec `
+  airflow-api-server airflow dags trigger bot_campaign_streaming_smoke
+```
+
+Airflow triggers and waits for the replay, but Docker Compose remains responsible for
+the long-running Kafka, Spark, scorer, and API services.
 
 ## 11. Kubernetes deployment
 

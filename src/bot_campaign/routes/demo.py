@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..runtime import TrustRuntime
+from ..runtime import StreamingUnavailableError, TrustRuntime
 from ..schemas import DemoReplayRequest
 from .dependencies import runtime
 
@@ -12,7 +12,10 @@ router = APIRouter(prefix="/v1/demo", tags=["demo"])
 def start_replay(
     request: DemoReplayRequest, service: TrustRuntime = Depends(runtime)
 ):
-    return service.replay(request.scenario)
+    try:
+        return service.replay(request.scenario, request.mode)
+    except StreamingUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/replay/{job_id}")

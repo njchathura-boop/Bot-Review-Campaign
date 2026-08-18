@@ -117,7 +117,13 @@ async function replayCampaign() {
   const selected = $("#example").value;
   const scenario = selected.includes("cross") ? "coordinated-cross-product" : selected.includes("negative") ? "coordinated-negative" : "coordinated-positive";
   try {
-    await fetchJson("/v1/demo/replay", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({scenario})});
+    let replay = await fetchJson("/v1/demo/replay", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({scenario, mode: "auto"})});
+    for (let attempt = 0; replay.status === "queued" && attempt < 90; attempt += 1) {
+      button.textContent = "Streaming through Spark...";
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      replay = await fetchJson(`/v1/demo/replay/${encodeURIComponent(replay.job_id)}`);
+    }
+    if (replay.status !== "completed") throw new Error("Streaming replay timed out before a campaign was materialized");
     await refreshAll(); location.hash = "campaigns";
   } catch (error) { window.alert(`Replay failed: ${error.message}`); }
   finally { button.disabled = false; button.textContent = "Replay campaign"; }

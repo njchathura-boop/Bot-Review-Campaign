@@ -16,6 +16,7 @@ x-airflow-common: &airflow-common
     BOT_CAMPAIGN_TEMPORAL_ROOT: ${BOT_CAMPAIGN_TEMPORAL_ROOT:-data/processed/temporal_bundle}
     BOT_CAMPAIGN_CAMPAIGN_SCENARIO_COUNT: ${BOT_CAMPAIGN_CAMPAIGN_SCENARIO_COUNT:-2000}
     BOT_CAMPAIGN_DATA_SEED: ${BOT_CAMPAIGN_DATA_SEED:-42}
+    BOT_CAMPAIGN_API_URL: http://host.docker.internal:8000
   volumes:
     - ./dags:/opt/airflow/dags/bot_campaign:ro
     - ..:/opt/project

@@ -16,6 +16,7 @@ def run(
     group_id: str,
     similarity_threshold: float,
     minimum_group_size: int,
+    dead_letter_topic: str,
 ) -> None:
     try:
         from confluent_kafka import Consumer, KafkaError, Producer
@@ -38,6 +39,11 @@ def run(
             "acks": "all",
         }
     )
+    delivery_errors: list[str] = []
+
+    def delivered(error, _message) -> None:
+        if error is not None:
+            delivery_errors.append(str(error))
     running = True
 
     def stop(*_args) -> None:
@@ -68,13 +74,32 @@ def run(
                         output_topic,
                         key=output["group_id"],
                         value=json.dumps(output, separators=(",", ":")),
+                        on_delivery=delivered,
                     )
-                producer.flush(30)
+                remaining = producer.flush(30)
+                if remaining or delivery_errors:
+                    raise RuntimeError(
+                        f"Kafka score delivery failed: remaining={remaining}, errors={delivery_errors[:3]}"
+                    )
                 consumer.commit(message=record, asynchronous=False)
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                raise RuntimeError(
-                    f"Invalid candidate at partition={record.partition()} offset={record.offset()}"
-                ) from exc
+                envelope = {
+                    "source_topic": input_topic,
+                    "partition": record.partition(),
+                    "offset": record.offset(),
+                    "error": str(exc),
+                    "value": record.value().decode("utf-8", errors="replace"),
+                }
+                producer.produce(
+                    dead_letter_topic,
+                    key=record.key(),
+                    value=json.dumps(envelope, separators=(",", ":")),
+                    on_delivery=delivered,
+                )
+                remaining = producer.flush(30)
+                if remaining or delivery_errors:
+                    raise RuntimeError("Kafka dead-letter delivery failed") from exc
+                consumer.commit(message=record, asynchronous=False)
     finally:
         producer.flush(30)
         consumer.close()
@@ -89,6 +114,9 @@ if __name__ == "__main__":
     parser.add_argument("--group-id", default="campaign-scorer-v1")
     parser.add_argument("--similarity-threshold", type=float, default=0.88)
     parser.add_argument("--minimum-group-size", type=int, default=3)
+    parser.add_argument(
+        "--dead-letter-topic", default="reviews.campaign-scores.dlq.v1"
+    )
     arguments = parser.parse_args()
     run(
         arguments.bundle,
@@ -98,4 +126,5 @@ if __name__ == "__main__":
         arguments.group_id,
         arguments.similarity_threshold,
         arguments.minimum_group_size,
+        arguments.dead_letter_topic,
     )

@@ -51,6 +51,8 @@ The single command-by-command execution guide is
 [`docs/END_TO_END_RUNBOOK.md`](docs/END_TO_END_RUNBOOK.md).
 The complete technology, script-call, trigger-command, streaming, deployment, and
 troubleshooting guide is [`docs/COMPLETE_PROJECT_GUIDE.md`](docs/COMPLETE_PROJECT_GUIDE.md).
+The runnable Kafka -> Spark -> graph -> hybrid model -> API path is documented in
+[`docs/LIVE_STREAMING_PIPELINE.md`](docs/LIVE_STREAMING_PIPELINE.md).
 
 ## Data architecture
 

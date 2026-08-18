@@ -6,6 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     APP_ENV=container
 
 WORKDIR /app
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 RUN addgroup --system app && adduser --system --ingroup app app
 
 COPY pyproject.toml README.md ./

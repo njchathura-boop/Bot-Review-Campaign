@@ -46,33 +46,188 @@ stages:
       size: 95516307
       nfiles: 17
   build_temporal_bundle:
-    cmd: python -m bot_campaign.cli build-temporal-bundle --behavioral-input 
-      data/raw/amazon_all_beauty_sample.jsonl --output-dir 
-      data/processed/temporal_bundle --campaign-scenario-count 2000 --seed 42
+    cmd: python -m bot_campaign.cli build-temporal-bundle --behavioral-input
+      data/raw/amazon_all_beauty.jsonl data/raw/amazon_amazon_fashion.jsonl
+      data/raw/amazon_appliances.jsonl
+      data/raw/amazon_arts_crafts_and_sewing.jsonl
+      data/raw/amazon_automotive.jsonl data/raw/amazon_baby_products.jsonl
+      data/raw/amazon_beauty_and_personal_care.jsonl data/raw/amazon_books.jsonl
+      data/raw/amazon_cds_and_vinyl.jsonl
+      data/raw/amazon_cell_phones_and_accessories.jsonl
+      data/raw/amazon_clothing_shoes_and_jewelry.jsonl
+      data/raw/amazon_digital_music.jsonl data/raw/amazon_electronics.jsonl
+      data/raw/amazon_gift_cards.jsonl
+      data/raw/amazon_grocery_and_gourmet_food.jsonl
+      data/raw/amazon_handmade_products.jsonl
+      data/raw/amazon_health_and_household.jsonl
+      data/raw/amazon_health_and_personal_care.jsonl
+      data/raw/amazon_home_and_kitchen.jsonl
+      data/raw/amazon_industrial_and_scientific.jsonl
+      data/raw/amazon_kindle_store.jsonl
+      data/raw/amazon_magazine_subscriptions.jsonl
+      data/raw/amazon_movies_and_tv.jsonl
+      data/raw/amazon_musical_instruments.jsonl
+      data/raw/amazon_office_products.jsonl
+      data/raw/amazon_patio_lawn_and_garden.jsonl
+      data/raw/amazon_pet_supplies.jsonl data/raw/amazon_software.jsonl
+      data/raw/amazon_sports_and_outdoors.jsonl
+      data/raw/amazon_subscription_boxes.jsonl
+      data/raw/amazon_tools_and_home_improvement.jsonl
+      data/raw/amazon_toys_and_games.jsonl data/raw/amazon_video_games.jsonl
+      --output-dir data/processed/temporal_bundle --campaign-scenario-count
+      816216 --seed 42
     deps:
-    - path: data/raw/amazon_all_beauty_sample.jsonl
+    - path: data/raw/amazon_all_beauty.jsonl
       hash: md5
-      md5: 603eb920632401e386780fe075e56254
-      size: 72718
+      md5: 889757caf652dbc70f1cdb1b6a5beea6
+      size: 21859996
+    - path: data/raw/amazon_amazon_fashion.jsonl
+      hash: md5
+      md5: d6c6b2201e548687d89e6a1946fc9657
+      size: 21623995
+    - path: data/raw/amazon_appliances.jsonl
+      hash: md5
+      md5: a0257bdb0efc8d53a1b80af72686718b
+      size: 21141156
+    - path: data/raw/amazon_arts_crafts_and_sewing.jsonl
+      hash: md5
+      md5: 6e224a38bbb1fda30ab9c41920eea77d
+      size: 23838115
+    - path: data/raw/amazon_automotive.jsonl
+      hash: md5
+      md5: bd6ed1ab027757ec0a648076b47c0496
+      size: 21261311
+    - path: data/raw/amazon_baby_products.jsonl
+      hash: md5
+      md5: 3e2ab9187fde223333bbe94e6963e509
+      size: 23928165
+    - path: data/raw/amazon_beauty_and_personal_care.jsonl
+      hash: md5
+      md5: eb1f2bc02f3db723cec61e1b38e348fa
+      size: 25187194
+    - path: data/raw/amazon_books.jsonl
+      hash: md5
+      md5: b73ee3705f5a0feac75cf4469d8e9751
+      size: 37799594
+    - path: data/raw/amazon_cds_and_vinyl.jsonl
+      hash: md5
+      md5: d4ad9f815d452be004dcde74d682f9a6
+      size: 25581433
+    - path: data/raw/amazon_cell_phones_and_accessories.jsonl
+      hash: md5
+      md5: 5af117cd8cc008e6e6d850d65d8af0f1
+      size: 22761855
+    - path: data/raw/amazon_clothing_shoes_and_jewelry.jsonl
+      hash: md5
+      md5: ad96beb93ffa458a6ebefe724742f60a
+      size: 23969483
+    - path: data/raw/amazon_digital_music.jsonl
+      hash: md5
+      md5: 11cc37b0a01c7f349e47a15bbd869fa8
+      size: 23556909
+    - path: data/raw/amazon_electronics.jsonl
+      hash: md5
+      md5: 8ce530fcd4ba1396bb6c82b83e209472
+      size: 26453053
+    - path: data/raw/amazon_gift_cards.jsonl
+      hash: md5
+      md5: f733c732090e4dfdf07eed39d1920b05
+      size: 17593003
+    - path: data/raw/amazon_grocery_and_gourmet_food.jsonl
+      hash: md5
+      md5: 52a52e1af18c8a64104e9daf8a6f60be
+      size: 21264613
+    - path: data/raw/amazon_handmade_products.jsonl
+      hash: md5
+      md5: 65e2f088cce17fc055b9ba12641c452a
+      size: 19614829
+    - path: data/raw/amazon_health_and_household.jsonl
+      hash: md5
+      md5: 694575cecc2c2d803892a637edc13996
+      size: 24760268
+    - path: data/raw/amazon_health_and_personal_care.jsonl
+      hash: md5
+      md5: 43e9b216da2b4ed618ce55f1b1377773
+      size: 22483280
+    - path: data/raw/amazon_home_and_kitchen.jsonl
+      hash: md5
+      md5: 14391f9c8e62676734319958a6906627
+      size: 25222115
+    - path: data/raw/amazon_industrial_and_scientific.jsonl
+      hash: md5
+      md5: 3d5453e5971e3365d3ce25649a89355b
+      size: 22694116
+    - path: data/raw/amazon_kindle_store.jsonl
+      hash: md5
+      md5: d8f9696b01a8ba16ad07aedde6194fa4
+      size: 33425051
+    - path: data/raw/amazon_magazine_subscriptions.jsonl
+      hash: md5
+      md5: 886e4541a6d94026789c68fe17e045ba
+      size: 21064114
+    - path: data/raw/amazon_movies_and_tv.jsonl
+      hash: md5
+      md5: 1b32d7ae78f32fa89c7377ee13ba72c4
+      size: 24688609
+    - path: data/raw/amazon_musical_instruments.jsonl
+      hash: md5
+      md5: 32ef6d7f4812806c296b81a2a28909ce
+      size: 24520812
+    - path: data/raw/amazon_office_products.jsonl
+      hash: md5
+      md5: 304ec3dc90e645e491598c374aeb6afb
+      size: 23286511
+    - path: data/raw/amazon_patio_lawn_and_garden.jsonl
+      hash: md5
+      md5: 2a775fa31b2bcd5f6867e8d361940237
+      size: 22976615
+    - path: data/raw/amazon_pet_supplies.jsonl
+      hash: md5
+      md5: 5a2d32a88e54f98dd6dd90fa74a581d2
+      size: 22677147
+    - path: data/raw/amazon_software.jsonl
+      hash: md5
+      md5: 8fff65a21a505888d4932743aa35aef8
+      size: 20269582
+    - path: data/raw/amazon_sports_and_outdoors.jsonl
+      hash: md5
+      md5: ef09d3980f5f70bfcc606acc7f51e285
+      size: 23740709
+    - path: data/raw/amazon_subscription_boxes.jsonl
+      hash: md5
+      md5: d120200f3a71ba272171c8c58a37f858
+      size: 14445316
+    - path: data/raw/amazon_tools_and_home_improvement.jsonl
+      hash: md5
+      md5: 3d23b8220acc76b46c26b1df35513114
+      size: 25076946
+    - path: data/raw/amazon_toys_and_games.jsonl
+      hash: md5
+      md5: bbe773a379c642c76e65c917d9d1c7d1
+      size: 24744536
+    - path: data/raw/amazon_video_games.jsonl
+      hash: md5
+      md5: 4b33131a673d75def22eb0180a155e65
+      size: 24945146
     - path: src/bot_campaign/cli.py
       hash: md5
-      md5: 9270762b1e8bf5ff0d3e58fa8b385f2d
-      size: 9354
+      md5: 5bc86e424d24aead5a5eb88f863ee2d4
+      size: 9570
     - path: src/bot_campaign/data.py
       hash: md5
-      md5: ea56bbaab52e069d44b0b58844b33b50
-      size: 5880
+      md5: 8e21ace72c1f5b3a23c1efc7af113c4b
+      size: 6030
     - path: src/bot_campaign/dataset_bundle.py
       hash: md5
-      md5: ea359fb2cb6d9d8d0809a51eb3ec98e3
-      size: 6132
+      md5: 6688d6c22ee55f49a054a1f3b3678a0d
+      size: 6291
     - path: src/bot_campaign/temporal.py
       hash: md5
-      md5: 8286183e9a265eddea624711b62c5e78
-      size: 29828
+      md5: 7e72e411700f327ce985f3491fe54bfa
+      size: 30512
     outs:
     - path: data/processed/temporal_bundle
       hash: md5
-      md5: c8b18c2c63564fba5caa5bd994a7a4b9.dir
-      size: 3195287
+      md5: 4987a96931ba3d4d1547888f96ec3555.dir
+      size: 2444197028
       nfiles: 9

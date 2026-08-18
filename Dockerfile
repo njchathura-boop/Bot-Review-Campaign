@@ -19,6 +19,7 @@ RUN python -m pip install \
       --index-url https://download.pytorch.org/whl/cpu \
       "torch>=2.4,<3" && \
     python -m pip install ".[nlp]" && \
+    python -m pip install --upgrade "setuptools>=82.0.1" && \
     python -m pip uninstall -y wheel jaraco.context && \
     mkdir -p artifacts && \
     chown -R app:app /app

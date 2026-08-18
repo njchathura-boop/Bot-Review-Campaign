@@ -15,6 +15,9 @@ class RuntimeMetrics:
         self._risks: deque[float] = deque(maxlen=2_000)
         self._counts: Counter[str] = Counter()
         self._started_at = time.monotonic()
+        self._stream_state = "disabled"
+        self._stream_error: str | None = None
+        self._stream_last_event_at: str | None = None
 
     def record_prediction(
         self, latency_ms: float, risk: float, needs_review: bool
@@ -28,6 +31,19 @@ class RuntimeMetrics:
     def record_dismissal(self) -> None:
         with self._lock:
             self._counts["dismissals"] += 1
+
+    def record_stream_score(self, candidate: bool) -> None:
+        with self._lock:
+            self._counts["stream_scores"] += 1
+            self._counts["stream_candidates"] += int(candidate)
+            self._stream_last_event_at = datetime.now(timezone.utc).isoformat()
+
+    def set_stream_state(self, state: str, error: str | None = None) -> None:
+        with self._lock:
+            self._stream_state = state
+            self._stream_error = error
+            if error:
+                self._counts["stream_errors"] += 1
 
     def summary(
         self,
@@ -66,6 +82,14 @@ class RuntimeMetrics:
                 "campaign_alerts": campaign_count,
                 "soft_limited_campaigns": soft_limit_count,
                 "campaign_dismissals": self._counts["dismissals"],
+                "streaming": {
+                    "state": self._stream_state,
+                    "scores_consumed": self._counts["stream_scores"],
+                    "candidates_materialized": self._counts["stream_candidates"],
+                    "errors": self._counts["stream_errors"],
+                    "last_event_at": self._stream_last_event_at,
+                    "last_error": self._stream_error,
+                },
                 "feature_drift": feature_drift,
                 "embedding_drift": embedding_drift,
                 "resources": {
@@ -82,6 +106,18 @@ def prometheus_text(summary: dict[str, Any]) -> str:
         ("review_inference_p95_ms", "Review inference p95 latency.", summary["latency_ms"]["p95"], "gauge"),
         ("campaign_alerts_total", "Campaigns currently detected.", summary["campaign_alerts"], "gauge"),
         ("review_feature_drift", "Feature drift score.", summary["feature_drift"], "gauge"),
+        (
+            "campaign_stream_scores_total",
+            "Scored campaign messages consumed from Kafka.",
+            summary["streaming"]["scores_consumed"],
+            "counter",
+        ),
+        (
+            "campaign_stream_consumer_errors_total",
+            "Campaign score consumer errors.",
+            summary["streaming"]["errors"],
+            "counter",
+        ),
     ]
     lines: list[str] = []
     for name, help_text, value, metric_type in values:

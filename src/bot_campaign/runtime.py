@@ -18,9 +18,14 @@ from .observability import RuntimeMetrics
 from .repository import InMemoryRepository
 from .review_transformer import ReviewDistilBertScorer
 from .schemas import CampaignAlert, Review, ReviewPrediction
+from .streaming_runtime import campaign_alert_from_score, detected_at, publish_reviews
 
 
 class ModelUnavailableError(RuntimeError):
+    pass
+
+
+class StreamingUnavailableError(RuntimeError):
     pass
 
 
@@ -127,9 +132,32 @@ class TrustRuntime:
         )
         return prediction
 
-    def replay(self, scenario: str) -> dict[str, Any]:
+    def replay(self, scenario: str, mode: str = "auto") -> dict[str, Any]:
         job_id = f"replay-{uuid.uuid4().hex[:12]}"
         reviews = replay_reviews(scenario)
+        if mode == "auto":
+            mode = "stream" if self.settings.streaming_enabled else "local"
+        if mode == "stream":
+            if not self.settings.streaming_enabled:
+                raise StreamingUnavailableError(
+                    "Streaming replay is disabled. Set CAMPAIGN_ALERTS_ENABLED=true and start Kafka, Spark, and campaign-scorer."
+                )
+            replay = {
+                "job_id": job_id,
+                "scenario": scenario,
+                "mode": "stream",
+                "status": "queued",
+                "published_reviews": 0,
+                "campaign_ids": [],
+            }
+            self.repository.save_replay(job_id, replay)
+            replay["published_reviews"] = publish_reviews(
+                reviews,
+                bootstrap_servers=self.settings.kafka_bootstrap_servers,
+                topic=self.settings.raw_reviews_topic,
+                replay_job_id=job_id,
+            )
+            return replay
         predictions = [self.score(review) for review in reviews]
         campaign_engine = "tfidf-graph-fallback"
         hybrid_scores: list[dict[str, Any]] = []
@@ -175,6 +203,18 @@ class TrustRuntime:
         }
         self.repository.save_replay(job_id, replay)
         return replay
+
+    def ingest_campaign_score(self, message: dict[str, Any]) -> None:
+        alert = campaign_alert_from_score(message)
+        self.metrics.record_stream_score(candidate=alert is not None)
+        if alert is None:
+            return
+        self.repository.upsert_campaign(alert, detected_at())
+        for job_id in message.get("replay_job_ids") or ():
+            self.repository.complete_replay(str(job_id), alert.campaign_id)
+
+    def set_stream_state(self, state: str, error: str | None = None) -> None:
+        self.metrics.set_stream_state(state, error)
 
     def moderate(
         self, campaign_id: str, decision: str, moderator: str, reason: str
@@ -270,6 +310,18 @@ class TrustRuntime:
             }
             for name, variable in configured.items()
         )
+        if self.settings.streaming_enabled:
+            stream = self.monitoring()["streaming"]
+            services.append(
+                {
+                    "name": "Campaign stream",
+                    "status": stream["state"],
+                    "detail": (
+                        f"{stream['scores_consumed']} scores consumed from "
+                        f"{self.settings.campaign_scores_topic}"
+                    ),
+                }
+            )
         return {
             "environment": self.settings.environment,
             "host": platform.node(),

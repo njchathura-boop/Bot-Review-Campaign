@@ -173,15 +173,22 @@ The key endpoints are `POST /v1/reviews/score`, `POST /v1/reviews/batch-score`,
 
 ## 9. Streaming flow
 
-Start the stream profile with `docker compose --profile stream up -d kafka spark-master spark-worker spark-stream`.
+Start the complete stream profile with
+`docker compose --profile stream up -d --build kafka kafka-init spark-master spark-worker spark-stream campaign-scorer api`.
 The call chain is `producer.py -> Kafka reviews.raw.v1 -> review_stream.py ->
 event-time watermark/window -> candidate topic -> campaign_scorer.py -> campaign_graph.py
-and campaign_features.py -> hybrid_model.py -> Kafka reviews.campaign-scores.v1`.
+and campaign_features.py -> hybrid_model.py -> Kafka reviews.campaign-scores.v1 ->
+FastAPI campaign materializer -> /v1/campaigns`.
 
 Kafka provides durable replay and back-pressure. Spark provides distributed event-time
 aggregation. The scorer commits offsets after output delivery. Inspect with
 `docker compose logs -f kafka`, `docker compose logs -f spark-stream`, and the Spark UI at
 `http://localhost:8082`.
+
+Use `POST /v1/demo/replay` with
+`{"scenario":"coordinated-cross-product","mode":"stream"}` to exercise the real
+online path. `docs/LIVE_STREAMING_PIPELINE.md` contains the PowerShell trigger, Airflow
+smoke DAG, topic inspection, dead-letter handling, and processing guarantees.
 
 ## 10. Airflow scheduler
 

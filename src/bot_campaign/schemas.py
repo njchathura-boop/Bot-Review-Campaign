@@ -83,6 +83,7 @@ class BatchReviewRequest(BaseModel):
 
 class DemoReplayRequest(BaseModel):
     scenario: str = Field(default="coordinated-positive", max_length=80)
+    mode: Literal["auto", "local", "stream"] = "auto"
 
 
 class ModerationDecision(BaseModel):

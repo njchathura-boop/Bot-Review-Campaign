@@ -30,9 +30,18 @@ services:
       WEB_DIR: /app/web
       REVIEW_TRANSFORMER_PATH: /models/review_distilbert
       CAMPAIGN_MODEL_PATH: /models/campaign_model
+      CAMPAIGN_ALERTS_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_RAW_REVIEWS_TOPIC: reviews.raw.v1
+      KAFKA_CAMPAIGN_SCORES_TOPIC: reviews.campaign-scores.v1
+      KAFKA_CAMPAIGN_ALERT_GROUP_ID: campaign-api-materializer-v1
+      SPARK_MASTER: spark://spark-master:7077
     volumes:
       - ./artifacts/review_distilbert:/models/review_distilbert:ro
       - ./artifacts/campaign_model:/models/campaign_model:ro
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
 
   kafka:
     image: apache/kafka:4.1.0
@@ -57,6 +66,25 @@ services:
       interval: 10s
       timeout: 10s
       retries: 12
+
+  kafka-init:
+    image: apache/kafka:4.1.0
+    command:
+      - /bin/bash
+      - -c
+      - >-
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092
+        --create --if-not-exists --topic reviews.raw.v1 --partitions 3 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092
+        --create --if-not-exists --topic reviews.analysis-windows.v1 --partitions 3 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092
+        --create --if-not-exists --topic reviews.campaign-scores.v1 --partitions 3 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092
+        --create --if-not-exists --topic reviews.campaign-scores.dlq.v1 --partitions 1 --replication-factor 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
 
   spark-master:
     image: apache/spark:4.0.1-scala2.13-java17-python3-ubuntu
@@ -101,8 +129,8 @@ services:
     environment:
       SPARK_LOCAL_HOSTNAME: spark-stream
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       spark-master:
         condition: service_started
 
@@ -278,7 +306,7 @@ services:
 
   campaign-scorer:
     <<: *ray-runtime
-    profiles: ["score"]
+    profiles: ["stream", "score"]
     command:
       - python
       - streaming/campaign_scorer.py
@@ -286,9 +314,16 @@ services:
       - artifacts/campaign_model
       - --bootstrap-servers
       - kafka:29092
+      - --input-topic
+      - reviews.analysis-windows.v1
+      - --output-topic
+      - reviews.campaign-scores.v1
+      - --dead-letter-topic
+      - reviews.campaign-scores.dlq.v1
+    restart: unless-stopped
     depends_on:
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
 volumes:
   mlflow-data:

@@ -4,6 +4,16 @@ Airflow is the outer workflow scheduler. It decides **when** training runs and s
 jobs to Ray. Ray Tune's ASHA scheduler remains inside each trainer and decides which
 hyperparameter trials continue or stop. MLflow records every trial and selected model.
 
+There are two manual DAGs:
+
+- `bot_campaign_model_retraining` rebuilds data and trains candidate models through Ray.
+- `bot_campaign_streaming_smoke` publishes a cross-product replay and succeeds only
+  when Kafka, Spark, the hybrid model, and FastAPI complete the round trip.
+
+Airflow is not used as the process supervisor for the never-ending Kafka consumers or
+Spark query. Docker Compose manages them locally; Kubernetes should manage them in a
+production environment.
+
 The DAG is `dags/bot_campaign_training.py`. It runs these tasks sequentially:
 
 ```text
@@ -70,6 +80,18 @@ environment:
 
 Recreate the Airflow DAG processor, scheduler and worker after changing their Compose
 file. In the Airflow UI, enable `bot_campaign_model_retraining` and trigger it manually.
+
+To validate the online path, first start the stream services using the command in
+`docs/LIVE_STREAMING_PIPELINE.md`, then enable and trigger
+`bot_campaign_streaming_smoke`. The CLI equivalents are:
+
+```powershell
+docker compose -f orchestration/docker-compose.airflow.yml exec `
+  airflow-api-server airflow dags trigger bot_campaign_streaming_smoke
+
+docker compose -f orchestration/docker-compose.airflow.yml exec `
+  airflow-api-server airflow dags trigger bot_campaign_model_retraining
+```
 
 ## Required services
 

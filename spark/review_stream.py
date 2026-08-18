@@ -23,6 +23,7 @@ REVIEW_SCHEMA = T.StructType(
         T.StructField("source", T.StringType(), True),
         T.StructField("schema_version", T.StringType(), True),
         T.StructField("hours_since_launch", T.DoubleType(), True),
+        T.StructField("replay_job_id", T.StringType(), True),
     ]
 )
 
@@ -102,6 +103,7 @@ def build_analysis_windows(frame):
         F.coalesce(F.col("verified_purchase"), F.lit(False)).alias("verified_purchase"),
         F.coalesce(F.col("helpful_votes"), F.lit(0)).alias("helpful_votes"),
         "category",
+        "replay_job_id",
         F.coalesce(F.col("hours_since_launch"), F.lit(24.0 * 365)).alias(
             "hours_since_launch"
         ),
@@ -193,8 +195,11 @@ def main():
         F.col("group_id").cast("string").alias("key"),
         F.to_json(F.struct("*")).cast("string").alias("value"),
     )
+    # Update mode emits active aggregate windows during a live stream. Append mode
+    # would wait until the two-hour watermark closes the window, which can leave a
+    # short campaign replay invisible until a much later event advances the watermark.
     writer = (
-        encoded.writeStream.outputMode("append")
+        encoded.writeStream.outputMode("update")
         .format("kafka")
         .option("kafka.bootstrap.servers", args.bootstrap_servers)
         .option("topic", args.output_topic)

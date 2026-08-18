@@ -80,3 +80,15 @@ class InMemoryRepository:
     def get_replay(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             return self._replays.get(job_id)
+
+    def complete_replay(self, job_id: str, campaign_id: str) -> None:
+        with self._lock:
+            replay = self._replays.get(job_id)
+            if not replay:
+                return
+            campaign_ids = set(replay.get("campaign_ids") or ())
+            campaign_ids.add(campaign_id)
+            replay.update(
+                status="completed",
+                campaign_ids=sorted(campaign_ids),
+            )

@@ -30,6 +30,7 @@ def test_window_scorer_emits_cross_product_scope_and_all_ids():
             "timestamp": f"2023-07-01T02:0{index}:00Z",
             "verified_purchase": False,
             "hours_since_launch": 2,
+            "replay_job_id": "replay-cross-product",
             "helpful_votes": 0,
             "product_reviews_previous_1h": 0,
             "user_reviews_previous_24h": 0,
@@ -51,4 +52,6 @@ def test_window_scorer_emits_cross_product_scope_and_all_ids():
     assert scores[0]["campaign_scope"] == "cross_product"
     assert scores[0]["product_ids"] == ["p-0", "p-1", "p-2"]
     assert scores[0]["candidate"] is True
+    assert scores[0]["user_ids"] == ["u-0", "u-1", "u-2"]
+    assert scores[0]["replay_job_ids"] == ["replay-cross-product"]
     assert np.isclose(scores[0]["campaign_risk"], 0.93)

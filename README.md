@@ -53,6 +53,9 @@ The complete technology, script-call, trigger-command, streaming, deployment, an
 troubleshooting guide is [`docs/COMPLETE_PROJECT_GUIDE.md`](docs/COMPLETE_PROJECT_GUIDE.md).
 The runnable Kafka -> Spark -> graph -> hybrid model -> API path is documented in
 [`docs/LIVE_STREAMING_PIPELINE.md`](docs/LIVE_STREAMING_PIPELINE.md).
+The focused data-preparation, Kafka, and Spark reference—including exact inputs,
+outputs, configuration, limitations, and a report screenshot checklist—is
+[`docs/DATA_PREPARATION_KAFKA_SPARK.md`](docs/DATA_PREPARATION_KAFKA_SPARK.md).
 
 ## Data architecture
 

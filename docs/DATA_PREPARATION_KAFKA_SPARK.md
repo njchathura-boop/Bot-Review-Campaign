@@ -313,13 +313,23 @@ python -m bot_campaign.cli build-temporal-bundle `
 
 ```powershell
 dvc dag
-dvc repro
 dvc status
+
+# Full temporal/campaign branch only
+dvc repro build_temporal_bundle
+
+# Complete text + behavior + campaign bundle only
+dvc repro build_dataset_bundle
 ```
 
-The checked-in DVC stages use the 100-row Amazon sample and 2,000 campaign events so CI
-and demonstrations remain affordable. A full-data run needs updated DVC parameters or a
-separate production stage. The sample DVC lock does not prove an 825,000-event run.
+The checked-in DVC stages now explicitly depend on all 33 downloaded Amazon category
+files and request 816,216 controlled campaign events. `Subscription_Boxes` contains only
+16,216 source reviews at the pinned revision, so the observed raw total is 816,216 rather
+than an artificially duplicated 825,000. This is a full-data pipeline and can require
+substantial disk, memory, and runtime. Run only the stage you need instead of assuming a
+plain `dvc repro` will be a quick smoke test. The first successful reproduction creates
+or updates `dvc.lock`; commit that lock file to record the exact dependency and output
+hashes, but keep the large JSONL outputs in DVC storage rather than Git.
 
 ## 4. Kafka
 
@@ -559,7 +569,9 @@ Spark UI is `http://localhost:8082`.
 7. Generated scenario/template bias can still be learned by the model.
 8. The Python temporal builder materializes substantial data in memory; full-scale ETL
    should eventually be chunked or moved to Spark batch processing.
-9. Checked-in DVC stages represent the small sample unless full paths/counts are updated.
+9. The full DVC stages are expensive and currently repeat temporal preparation when both
+   `build_temporal_bundle` and `build_dataset_bundle` are reproduced. Run a named stage
+   when only one output bundle is required.
 10. Great Expectations is planned but not implemented.
 
 ### Kafka

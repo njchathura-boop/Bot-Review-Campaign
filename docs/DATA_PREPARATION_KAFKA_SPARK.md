@@ -17,6 +17,52 @@ Spark does not currently build the offline training bundle. Do not state in the 
 that Spark cleaned or split the offline dataset. Its implemented responsibility is live
 event-time validation, routing, watermarking, windowing, and aggregation.
 
+### What has been completed in data preparation
+
+The current pipeline deliberately separates three kinds of evidence:
+
+1. `product_reviews.jsonl` and the Kaggle OR/CG dataset supply supervised ecommerce text
+   labels for the individual-review model. OTT hotel reviews and MAiDE-up are not used.
+2. All 33 Amazon Reviews 2023 category files supply observed ecommerce timestamps,
+   products, accounts, ratings, verification, helpful votes, and categories. They are
+   not assigned fabricated fake-review labels.
+3. Controlled campaign scenarios use the learned Amazon behavior distributions to
+   produce known positive, negative, paraphrased, slow-drip, cross-product, off-hour,
+   and legitimate-burst groups for campaign-model training and evaluation.
+
+The downloader produces 816,216 raw Amazon records at the configured limits because the
+pinned `Subscription_Boxes` source contains 16,216 rather than 25,000 reviews. The DVC
+stages explicitly list every category and request 816,216 controlled scenario events.
+They validate and normalize the raw rows, derive only past-visible temporal features,
+create group-isolated splits, write manifests and hashes, and then let DVC record the
+resulting lineage. The raw data must appear under the active repository's `data/raw`
+path; on the same Windows volume, NTFS hard links can expose files from another clone
+without storing a second copy.
+
+The completed full temporal reproduction records:
+
+```text
+Raw Amazon input rows:       816,216
+Valid observed events:       812,294
+Rejected invalid rows:         2,834
+Duplicate review IDs:          1,088
+Observed products:           531,153
+Observed users:              159,617
+Controlled campaign events:  816,216
+Campaign train:              571,312
+Campaign validation:         122,405
+Campaign test:               122,499
+DVC output size:             2,444,197,028 bytes
+```
+
+All 531,153 launch timestamps currently use the documented
+`earliest_observed_review_proxy` because no product catalogue was supplied. The observed
+Amazon time range remains 1997-09-10 through 2023-08-30; synthetic event times are
+reflected into learned product/category observation windows.
+
+This preparation is offline Python ETL. It creates model inputs but does not send all
+816,216 records through Kafka automatically.
+
 ```mermaid
 flowchart TB
     subgraph OFFLINE[Offline preparation]
@@ -497,6 +543,24 @@ score and exposes candidates through `/v1/campaigns` and the campaign UI.
 
 ## 6. Run the complete live path
 
+### What Spark should stream
+
+Spark should receive review events that arrive after deployment: a customer submission,
+a UI campaign replay, or an intentional historical replay from `streaming/producer.py`.
+Each Kafka `reviews.raw.v1` message is one canonical timestamped review. Spark should:
+
+1. validate and parse the event timestamp;
+2. apply the two-hour late-data watermark;
+3. route the event by product, account, and meaningful semantic tokens;
+4. place it into one-hour windows sliding every ten minutes;
+5. emit groups of at least three related events to
+   `reviews.analysis-windows.v1`.
+
+Spark does not call DistilBERT and does not make the final campaign decision. The
+campaign scorer consumes those candidate windows, constructs the cross-product graph,
+uses DistilBERT embeddings plus numeric campaign features, and publishes final scores to
+`reviews.campaign-scores.v1`. FastAPI consumes that topic and updates the Campaign UI.
+
 Start Docker Desktop and run from the updated repository copy:
 
 ```powershell
@@ -553,6 +617,40 @@ Invoke-RestMethod http://localhost:8000/v1/monitoring/summary
 ```
 
 Spark UI is `http://localhost:8082`.
+
+### Start the full local demonstration stack
+
+The UI-serving stack, streaming path, and observability services can be started together:
+
+```powershell
+docker compose --profile stream --profile observability up -d --build `
+  api kafka kafka-init spark-master spark-worker spark-stream campaign-scorer `
+  mlflow prometheus grafana elasticsearch kibana
+```
+
+Ray is required for training demonstrations, not for serving an already trained model.
+Start it separately only when needed:
+
+```powershell
+docker compose up -d --build ray-head ray-worker
+```
+
+After rebuilding the API, the operations cards have these meanings:
+
+| Card state | Meaning |
+|---|---|
+| `healthy` | A bounded live probe succeeded |
+| `running` | The FastAPI Kafka score consumer thread is active |
+| `degraded` | A service answered but a required worker, topic, or Spark app is absent |
+| `unavailable` | The configured endpoint did not answer |
+| `not_configured` | The component is intentionally outside this local process |
+
+Kafka is healthy only when the broker answers and required topics exist. Spark is healthy
+only when its master answers, at least one worker is alive, and
+`cross-product-routing-windows` is active. MLflow is healthy only when its health endpoint
+answers. `Campaign stream` describes the API's Kafka consumer and its cumulative score
+count; it is separate from the Spark application. Kubernetes remains `not_configured` in
+the local Compose demonstration because manifests alone do not create a cluster.
 
 ## 7. Current loopholes and honest limitations
 

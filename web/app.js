@@ -188,7 +188,11 @@ async function loadOps() {
   const data = await fetchJson("/v1/operations"), root = $("#service-grid"); root.replaceChildren();
   data.services.forEach((item) => {
     const card = element("article", "service-card"), head = element("div", "service-head");
-    const state = item.status === "healthy" ? "safe" : item.status === "unavailable" ? "warn" : "neutral";
+    const state = ["healthy", "running"].includes(item.status)
+      ? "safe"
+      : ["unavailable", "failed", "degraded"].includes(item.status)
+        ? "warn"
+        : "neutral";
     head.append(element("strong", "", item.name), element("span", `status ${state}`, item.status));
     card.append(head, element("p", "meta", item.detail)); root.append(card);
   });

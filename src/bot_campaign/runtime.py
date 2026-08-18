@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import os
 import platform
+import socket
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.request import Request, urlopen
 
 from .campaign import detect_campaigns
 from .campaign_graph import CAMPAIGN_WINDOW_SCHEMA
@@ -270,13 +272,110 @@ class TrustRuntime:
             "deployment": self.settings.deployment_revision,
         }
 
+    @staticmethod
+    def _service(name: str, status: str, detail: str) -> dict[str, str]:
+        return {"name": name, "status": status, "detail": detail}
+
+    def _kafka_status(self) -> dict[str, str]:
+        if not os.getenv("KAFKA_BOOTSTRAP_SERVERS"):
+            return self._service("Kafka", "not_configured", "not part of this process")
+        try:
+            from confluent_kafka.admin import AdminClient
+
+            metadata = AdminClient(
+                {"bootstrap.servers": self.settings.kafka_bootstrap_servers}
+            ).list_topics(timeout=1.5)
+            required = {
+                self.settings.raw_reviews_topic,
+                "reviews.analysis-windows.v1",
+                self.settings.campaign_scores_topic,
+            }
+            missing = sorted(required.difference(metadata.topics))
+            if missing:
+                return self._service(
+                    "Kafka", "degraded", f"reachable; missing topics: {', '.join(missing)}"
+                )
+            return self._service(
+                "Kafka",
+                "healthy",
+                f"{len(metadata.brokers)} broker(s); required topics available",
+            )
+        except Exception as exc:
+            return self._service("Kafka", "unavailable", f"probe failed: {exc}")
+
+    def _spark_status(self) -> dict[str, str]:
+        if not os.getenv("SPARK_MASTER"):
+            return self._service("Spark", "not_configured", "not part of this process")
+        try:
+            request = Request(self.settings.spark_master_ui_url, headers={"Accept": "application/json"})
+            with urlopen(request, timeout=1.5) as response:  # noqa: S310 - operator-owned URL
+                payload = json.loads(response.read().decode("utf-8"))
+            workers = [
+                worker
+                for worker in payload.get("workers", [])
+                if str(worker.get("state", "")).upper() == "ALIVE"
+            ]
+            active_apps = payload.get("activeapps", [])
+            stream_apps = [
+                app
+                for app in active_apps
+                if app.get("name") == "cross-product-routing-windows"
+            ]
+            if not workers:
+                return self._service("Spark", "degraded", "master reachable; no alive workers")
+            if not stream_apps:
+                return self._service(
+                    "Spark", "degraded", f"master and {len(workers)} worker(s) healthy; stream stopped"
+                )
+            return self._service(
+                "Spark",
+                "healthy",
+                f"{len(workers)} worker(s); cross-product stream running",
+            )
+        except Exception as exc:
+            return self._service("Spark", "unavailable", f"probe failed: {exc}")
+
+    def _mlflow_status(self) -> dict[str, str]:
+        if not (os.getenv("MLFLOW_HEALTH_URL") or os.getenv("MLFLOW_URL")):
+            return self._service("MLflow", "not_configured", "not part of this process")
+        try:
+            request = Request(self.settings.mlflow_health_url, headers={"Accept": "text/plain"})
+            with urlopen(request, timeout=1.5) as response:  # noqa: S310 - operator-owned URL
+                if response.status >= 400:
+                    raise RuntimeError(f"HTTP {response.status}")
+            return self._service("MLflow", "healthy", "tracking server reachable")
+        except Exception as exc:
+            return self._service("MLflow", "unavailable", f"probe failed: {exc}")
+
+    def _http_service_status(
+        self, name: str, environment_key: str, health_url: str
+    ) -> dict[str, str]:
+        if not os.getenv(environment_key):
+            return self._service(name, "not_configured", "not part of this process")
+        try:
+            request = Request(health_url, headers={"Accept": "application/json"})
+            with urlopen(request, timeout=2.5) as response:  # noqa: S310 - operator-owned URL
+                if response.status >= 400:
+                    raise RuntimeError(f"HTTP {response.status}")
+            return self._service(name, "healthy", "service endpoint reachable")
+        except Exception as exc:
+            return self._service(name, "unavailable", f"probe failed: {exc}")
+
+    def _kubernetes_status(self) -> dict[str, str]:
+        host = os.getenv("KUBERNETES_SERVICE_HOST")
+        if not host:
+            return self._service(
+                "Kubernetes", "not_configured", "not part of the local Compose process"
+            )
+        port = int(os.getenv("KUBERNETES_SERVICE_PORT", "443"))
+        try:
+            with socket.create_connection((host, port), timeout=1.5):
+                pass
+            return self._service("Kubernetes", "healthy", "cluster API reachable")
+        except OSError as exc:
+            return self._service("Kubernetes", "unavailable", f"probe failed: {exc}")
+
     def operations(self) -> dict[str, Any]:
-        configured = {
-            "Kafka": "KAFKA_BOOTSTRAP_SERVERS",
-            "Spark": "SPARK_MASTER",
-            "MLflow": "MLFLOW_URL",
-            "Kubernetes": "KUBERNETES_SERVICE_HOST",
-        }
         services = [
             {
                 "name": "FastAPI",
@@ -299,16 +398,21 @@ class TrustRuntime:
             },
         ]
         services.extend(
-            {
-                "name": name,
-                "status": "configured" if os.getenv(variable) else "not_configured",
-                "detail": (
-                    "endpoint configured"
-                    if os.getenv(variable)
-                    else "not part of this local process"
+            [
+                self._kafka_status(),
+                self._spark_status(),
+                self._mlflow_status(),
+                self._http_service_status(
+                    "Prometheus", "PROMETHEUS_HEALTH_URL", self.settings.prometheus_health_url
                 ),
-            }
-            for name, variable in configured.items()
+                self._http_service_status(
+                    "Grafana", "GRAFANA_HEALTH_URL", self.settings.grafana_health_url
+                ),
+                self._http_service_status(
+                    "Kibana", "KIBANA_HEALTH_URL", self.settings.kibana_health_url
+                ),
+                self._kubernetes_status(),
+            ]
         )
         if self.settings.streaming_enabled:
             stream = self.monitoring()["streaming"]
@@ -329,6 +433,8 @@ class TrustRuntime:
             "links": {
                 "grafana": self.settings.grafana_url,
                 "mlflow": self.settings.mlflow_url,
+                "prometheus": self.settings.prometheus_url,
+                "kibana": self.settings.kibana_url,
             },
             "lineage": self.lineage(),
         }

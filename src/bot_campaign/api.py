@@ -40,7 +40,9 @@ def create_app(
                 consumer.stop()
 
     app = FastAPI(
-        title="Review Trust API", version=settings.app_version, lifespan=lifespan
+        title="Detectra Review Intelligence API",
+        version=settings.app_version,
+        lifespan=lifespan,
     )
     app.state.runtime = service
     app.include_router(reviews.router)

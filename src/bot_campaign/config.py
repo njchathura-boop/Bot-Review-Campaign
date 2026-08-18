@@ -28,7 +28,14 @@ class Settings:
     deployment_revision: str
     mlflow_run_id: str
     grafana_url: str
+    grafana_health_url: str
     mlflow_url: str
+    mlflow_health_url: str
+    prometheus_url: str
+    prometheus_health_url: str
+    kibana_url: str
+    kibana_health_url: str
+    spark_master_ui_url: str
     campaign_candidate_limit: int
     streaming_enabled: bool
     kafka_bootstrap_servers: str
@@ -70,7 +77,24 @@ class Settings:
             ),
             mlflow_run_id=os.getenv("MLFLOW_RUN_ID", "local-baseline"),
             grafana_url=os.getenv("GRAFANA_URL", "http://localhost:3000"),
+            grafana_health_url=os.getenv(
+                "GRAFANA_HEALTH_URL", "http://localhost:3000/api/health"
+            ),
             mlflow_url=os.getenv("MLFLOW_URL", "http://localhost:5001"),
+            mlflow_health_url=os.getenv(
+                "MLFLOW_HEALTH_URL", os.getenv("MLFLOW_URL", "http://localhost:5001")
+            ),
+            prometheus_url=os.getenv("PROMETHEUS_URL", "http://localhost:9090"),
+            prometheus_health_url=os.getenv(
+                "PROMETHEUS_HEALTH_URL", "http://localhost:9090/-/ready"
+            ),
+            kibana_url=os.getenv("KIBANA_URL", "http://localhost:5601"),
+            kibana_health_url=os.getenv(
+                "KIBANA_HEALTH_URL", "http://localhost:5601/api/status"
+            ),
+            spark_master_ui_url=os.getenv(
+                "SPARK_MASTER_UI_URL", "http://localhost:8082/json/"
+            ),
             campaign_candidate_limit=max(
                 20, min(int(os.getenv("CAMPAIGN_CANDIDATE_LIMIT", "100")), 500)
             ),

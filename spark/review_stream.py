@@ -139,7 +139,7 @@ def build_analysis_windows(frame):
         )
         .agg(
             F.count("*").alias("event_count"),
-            F.slice(F.sort_array(F.collect_list(event)), 1, MAX_EVENTS_PER_WINDOW).alias(
+            F.slice(F.sort_array(F.collect_list(F.col("event"))), 1, MAX_EVENTS_PER_WINDOW).alias(
                 "events"
             ),
         )

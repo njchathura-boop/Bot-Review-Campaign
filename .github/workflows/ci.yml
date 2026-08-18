@@ -63,7 +63,7 @@ jobs:
           --baseline-data ""
       - name: Validate orchestration DAG source
         run: python -m compileall -q orchestration/dags
-      - run: ruff check src tests training streaming spark
+      - run: ruff check src tests training streaming spark scripts
       - run: pytest -q -p no:cacheprovider
 
   container:

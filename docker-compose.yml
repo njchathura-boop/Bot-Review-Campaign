@@ -31,6 +31,8 @@ services:
       PROMETHEUS_HEALTH_URL: http://prometheus:9090/-/ready
       KIBANA_URL: http://localhost:5601
       KIBANA_HEALTH_URL: http://kibana:5601/api/status
+      RAY_DASHBOARD_URL: http://localhost:8265
+      RAY_DASHBOARD_HEALTH_URL: http://ray-head:8265/api/jobs/
       GIT_COMMIT: ${GIT_COMMIT:-local-compose}
       IMAGE_DIGEST: ${IMAGE_DIGEST:-bot-campaign:local}
       WEB_DIR: /app/web
@@ -183,8 +185,12 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Ray embeds Grafana panels in its Metrics tab. Anonymous users stay
+      # read-only; use admin/admin locally when a dashboard must be edited.
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./.runtime/ray-grafana-dashboards:/var/lib/grafana/dashboards/ray:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
@@ -219,7 +225,16 @@ services:
 
   ray-head:
     <<: *ray-runtime
-    command: ["ray", "start", "--head", "--port=6379", "--dashboard-host=0.0.0.0", "--block"]
+    command: ["ray", "start", "--head", "--port=6379", "--dashboard-host=0.0.0.0", "--metrics-export-port=8080", "--block"]
+    environment:
+      PYTHONPATH: /opt/project/src
+      RAY_PROMETHEUS_HOST: http://prometheus:9090
+      RAY_PROMETHEUS_NAME: Prometheus
+      RAY_GRAFANA_HOST: http://grafana:3000
+      RAY_GRAFANA_IFRAME_HOST: http://localhost:3000
+      # Ray writes version-matched official dashboards into this shared,
+      # ignored runtime directory for Grafana to provision.
+      RAY_METRICS_GRAFANA_DASHBOARD_OUTPUT_DIR: /opt/project/.runtime/ray-grafana-dashboards
     ports:
       - "8265:8265"
       - "6379:6379"
@@ -232,7 +247,7 @@ services:
 
   ray-worker:
     <<: *ray-runtime
-    command: ["ray", "start", "--address=ray-head:6379", "--block"]
+    command: ["ray", "start", "--address=ray-head:6379", "--metrics-export-port=8080", "--block"]
     depends_on:
       ray-head:
         condition: service_healthy

@@ -167,6 +167,7 @@ docker compose --profile stream --profile observability up -d `
             <li><code>localhost:5001</code><span>MLflow experiments</span></li>
             <li><code>localhost:3000</code><span>Grafana dashboards</span></li>
             <li><code>localhost:5601</code><span>Kibana logs</span></li>
+            <li><code>localhost:8265</code><span>Ray training cluster (optional)</span></li>
           </ul>
           <pre class="compact-code"><code>docker compose ps
 Invoke-RestMethod http://localhost:8000/health/ready

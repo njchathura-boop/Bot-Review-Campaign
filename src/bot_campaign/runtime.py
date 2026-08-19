@@ -411,6 +411,11 @@ class TrustRuntime:
                 self._http_service_status(
                     "Kibana", "KIBANA_HEALTH_URL", self.settings.kibana_health_url
                 ),
+                self._http_service_status(
+                    "Ray",
+                    "RAY_DASHBOARD_HEALTH_URL",
+                    self.settings.ray_dashboard_health_url,
+                ),
                 self._kubernetes_status(),
             ]
         )
@@ -435,6 +440,7 @@ class TrustRuntime:
                 "mlflow": self.settings.mlflow_url,
                 "prometheus": self.settings.prometheus_url,
                 "kibana": self.settings.kibana_url,
+                "ray": self.settings.ray_dashboard_url,
             },
             "lineage": self.lineage(),
         }

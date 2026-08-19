@@ -35,6 +35,8 @@ class Settings:
     prometheus_health_url: str
     kibana_url: str
     kibana_health_url: str
+    ray_dashboard_url: str
+    ray_dashboard_health_url: str
     spark_master_ui_url: str
     campaign_candidate_limit: int
     streaming_enabled: bool
@@ -91,6 +93,10 @@ class Settings:
             kibana_url=os.getenv("KIBANA_URL", "http://localhost:5601"),
             kibana_health_url=os.getenv(
                 "KIBANA_HEALTH_URL", "http://localhost:5601/api/status"
+            ),
+            ray_dashboard_url=os.getenv("RAY_DASHBOARD_URL", "http://localhost:8265"),
+            ray_dashboard_health_url=os.getenv(
+                "RAY_DASHBOARD_HEALTH_URL", "http://localhost:8265/api/jobs/"
             ),
             spark_master_ui_url=os.getenv(
                 "SPARK_MASTER_UI_URL", "http://localhost:8082/json/"

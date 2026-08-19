@@ -20,6 +20,29 @@ they are not the same schema as the individual review files.
 
 ## 1. Preflight checks
 
+### Use only the canonical checkout
+
+This machine has had two clones with the same Compose project name (`bot-campaign`).
+Running `docker compose` from the older clone can replace the API container and make the
+UI appear to lose its palette or recent features. The current checkout is:
+
+```text
+C:\Users\njcha\Desktop\IITM\SEM3\MLOPS\Bot_Campaign_Project
+```
+
+Confirm the served page before a demo:
+
+```powershell
+Set-Location 'C:\Users\njcha\Desktop\IITM\SEM3\MLOPS\Bot_Campaign_Project'
+$page = Invoke-WebRequest http://localhost:8000 -UseBasicParsing
+[regex]::Match($page.Content, '<title>(.*?)</title>').Groups[1].Value
+$page.Content.Contains('Run Detectra on your machine')
+```
+
+The expected values are `Detectra | Review Intelligence` and `True`. Use
+`scripts/start_detectra.ps1` for subsequent starts because it resolves the canonical
+repository path and validates a current-UI marker before invoking Compose.
+
 ```powershell
 git switch feature/njc
 git pull --ff-only

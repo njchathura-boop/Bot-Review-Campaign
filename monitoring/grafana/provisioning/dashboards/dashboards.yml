@@ -1,0 +1,24 @@
+apiVersion: 1
+
+providers:
+  - name: Detectra
+    orgId: 1
+    folder: Detectra
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false
+
+  - name: Ray
+    orgId: 1
+    folder: Ray
+    type: file
+    disableDeletion: false
+    editable: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards/ray
+      foldersFromFilesStructure: false

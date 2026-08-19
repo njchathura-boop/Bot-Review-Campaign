@@ -27,13 +27,13 @@ Running `docker compose` from the older clone can replace the API container and 
 UI appear to lose its palette or recent features. The current checkout is:
 
 ```text
-C:\Users\njcha\Desktop\IITM\SEM3\MLOPS\Bot_Campaign_Project
+C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project
 ```
 
 Confirm the served page before a demo:
 
 ```powershell
-Set-Location 'C:\Users\njcha\Desktop\IITM\SEM3\MLOPS\Bot_Campaign_Project'
+Set-Location 'C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project'
 $page = Invoke-WebRequest http://localhost:8000 -UseBasicParsing
 [regex]::Match($page.Content, '<title>(.*?)</title>').Groups[1].Value
 $page.Content.Contains('Run Detectra on your machine')

@@ -60,7 +60,7 @@ file so the DAG processor, scheduler and workers see the same file:
 
 ```yaml
 volumes:
-  - "C:/Users/njcha/Desktop/IITM/SEM3/MLOPS/Bot_Campaign_Project/orchestration/dags:/opt/airflow/dags/bot_campaign:ro"
+  - "C:/Users/njcha/Desktop/My Files/IITM/SEM3/MLOPS/Bot_Campaign_Project/orchestration/dags:/opt/airflow/dags/bot_campaign:ro"
 ```
 
 Add these environment values to the common Airflow environment:

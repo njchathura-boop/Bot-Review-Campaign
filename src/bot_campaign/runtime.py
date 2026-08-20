@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import platform
 import socket
@@ -21,6 +22,9 @@ from .repository import InMemoryRepository
 from .review_transformer import ReviewDistilBertScorer
 from .schemas import CampaignAlert, Review, ReviewPrediction
 from .streaming_runtime import campaign_alert_from_score, detected_at, publish_reviews
+
+
+LOGGER = logging.getLogger("bot_campaign.audit")
 
 
 class ModelUnavailableError(RuntimeError):
@@ -130,7 +134,19 @@ class TrustRuntime:
         }
         self.repository.add_review(review, record)
         self.metrics.record_prediction(
-            latency_ms, prediction.fake_probability, prediction.needs_review
+            latency_ms,
+            prediction.fake_probability,
+            prediction.calibrated_confidence or 0.0,
+            prediction.needs_review,
+            review.language,
+        )
+        LOGGER.info(
+            "review_scored review_id=%s product_id=%s risk=%.4f needs_review=%s model=%s",
+            review.review_id,
+            review.product_id,
+            prediction.fake_probability,
+            prediction.needs_review,
+            prediction.model_version,
         )
         return prediction
 
@@ -158,6 +174,10 @@ class TrustRuntime:
                 bootstrap_servers=self.settings.kafka_bootstrap_servers,
                 topic=self.settings.raw_reviews_topic,
                 replay_job_id=job_id,
+            )
+            LOGGER.info(
+                "replay_published replay_job_id=%s scenario=%s reviews=%s mode=stream",
+                job_id, scenario, replay["published_reviews"],
             )
             return replay
         predictions = [self.score(review) for review in reviews]
@@ -204,13 +224,22 @@ class TrustRuntime:
             "hybrid_scores": hybrid_scores,
         }
         self.repository.save_replay(job_id, replay)
+        LOGGER.info(
+            "replay_completed replay_job_id=%s scenario=%s reviews=%s campaign_engine=%s",
+            job_id, scenario, len(predictions), campaign_engine,
+        )
         return replay
 
     def ingest_campaign_score(self, message: dict[str, Any]) -> None:
         alert = campaign_alert_from_score(message)
         self.metrics.record_stream_score(candidate=alert is not None)
         if alert is None:
+            LOGGER.info("campaign_score_consumed candidate=false")
             return
+        LOGGER.info(
+            "campaign_candidate_materialized campaign_id=%s product_id=%s risk=%.4f",
+            alert.campaign_id, alert.product_id, alert.risk_score,
+        )
         self.repository.upsert_campaign(alert, detected_at())
         for job_id in message.get("replay_job_ids") or ():
             self.repository.complete_replay(str(job_id), alert.campaign_id)
@@ -236,6 +265,7 @@ class TrustRuntime:
             self.metrics.record_dismissal()
         else:
             campaign.update(status="restored", soft_limit=False, expires_at=None)
+        self.metrics.record_moderation(decision)
         campaign["moderation_history"].append(
             {
                 "decision": decision,
@@ -245,6 +275,10 @@ class TrustRuntime:
             }
         )
         self.repository.save_campaign(campaign_id, campaign)
+        LOGGER.info(
+            "campaign_moderated campaign_id=%s decision=%s moderator=%s",
+            campaign_id, decision, moderator,
+        )
         return campaign
 
     def monitoring(self) -> dict[str, Any]:
@@ -252,9 +286,6 @@ class TrustRuntime:
         return self.metrics.summary(
             campaign_count=len(campaigns),
             soft_limit_count=sum(int(item["soft_limit"]) for item in campaigns),
-            kafka_lag=int(os.getenv("DEMO_KAFKA_LAG", "0")),
-            feature_drift=float(os.getenv("DEMO_FEATURE_DRIFT", "0.04")),
-            embedding_drift=float(os.getenv("DEMO_EMBEDDING_DRIFT", "0.03")),
         )
 
     def lineage(self, model_version: str | None = None) -> dict[str, str]:

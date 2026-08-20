@@ -192,9 +192,9 @@ For Kubernetes:
 
 ```powershell
 kubectl -n bot-campaign get pods
-kubectl -n bot-campaign get deployment bot-campaign-api
-kubectl -n bot-campaign rollout status deployment/bot-campaign-api
-kubectl -n bot-campaign logs deployment/bot-campaign-api --tail=100
+kubectl -n bot-campaign get deployment detectra-api
+kubectl -n bot-campaign rollout status deployment/detectra-api
+kubectl -n bot-campaign logs deployment/detectra-api --tail=100
 ```
 
 ## 5. Alert thresholds
@@ -254,24 +254,20 @@ It runs for semantic version tags (`v*`) or from `workflow_dispatch`:
 
 ```text
 Git tag
-  -> Build image with Git SHA
-  -> Push to GHCR
-  -> Trivy scan
-  -> Render k8s/base.yaml with exact image
+  -> Build API/UI and ETL/training images with Git SHA
+  -> Push both images to GHCR
+  -> Trivy scan both images
+  -> Render the k8s Kustomize base with exact images
   -> Deploy staging
-  -> Wait for rollout
-  -> Call /health/ready
+  -> Wait for API, Ray, MLflow, Prometheus, and Grafana
+  -> Call /health/ready and /metrics
 ```
 
-The deployment uses:
-
-- Three initial API replicas.
-- Readiness and liveness probes.
-- Horizontal Pod Autoscaling.
-- Pod disruption budget.
-- Immutable image references.
-- Kubernetes rolling replacement.
-- Argo CD reconciliation through `deploy/argocd-application.yaml`.
+The deployment uses one API replica while campaign state remains in process, separate
+Ray and ETL workloads, readiness/liveness probes, resource limits, immutable image
+references, persistent storage, Kubernetes rolling replacement, and Argo CD
+reconciliation through `deploy/argocd-application.yaml`. See `k8s/README.md` for the
+complete CPU/GPU and DVC procedure.
 
 ### Required GitHub configuration
 
@@ -310,9 +306,9 @@ the API. Keep the previous bundle until the new model passes its monitoring wind
 ### Kubernetes rollback
 
 ```powershell
-kubectl -n bot-campaign rollout history deployment/bot-campaign-api
-kubectl -n bot-campaign rollout undo deployment/bot-campaign-api
-kubectl -n bot-campaign rollout status deployment/bot-campaign-api
+kubectl -n bot-campaign rollout history deployment/detectra-api
+kubectl -n bot-campaign rollout undo deployment/detectra-api
+kubectl -n bot-campaign rollout status deployment/detectra-api
 ```
 
 Argo CD can also sync the previous known-good revision. Roll back both the application

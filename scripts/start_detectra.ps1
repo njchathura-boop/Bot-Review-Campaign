@@ -49,7 +49,7 @@ $services = @(
     "ray-head", "ray-worker"
 )
 if ($Observability) {
-    $services += @("elasticsearch", "kibana")
+    $services += @("elasticsearch", "kibana", "filebeat")
 }
 $composeArgs += $services
 

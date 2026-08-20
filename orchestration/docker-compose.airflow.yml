@@ -4,9 +4,17 @@ x-airflow-common: &airflow-common
   image: apache/airflow:3.1.3
   environment: &airflow-environment
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    # Keep the local development login stable when containers are recreated.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/simple_auth_manager_passwords.json
+    # Airflow 3 LocalExecutor workers must call the API server through the Compose network.
+    # The fallback localhost:8080 points back at the scheduler container and fails.
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-local-development-only}
+    # Airflow 3 uses this key to sign scheduler-to-API task execution messages.
+    # It must be identical in scheduler, dag processor, and API containers.
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_API_AUTH_JWT_SECRET:-bot-campaign-local-task-signing-key}
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "30"
     BOT_CAMPAIGN_RAY_JOBS_URL: http://host.docker.internal:8265
@@ -19,6 +27,7 @@ x-airflow-common: &airflow-common
     BOT_CAMPAIGN_API_URL: http://host.docker.internal:8000
   volumes:
     - ./dags:/opt/airflow/dags/bot_campaign:ro
+    - ./airflow_simple_auth_passwords.json:/opt/airflow/simple_auth_manager_passwords.json
     - ..:/opt/project
   depends_on:
     postgres:
@@ -59,11 +68,18 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
   airflow-api-server:
     <<: *airflow-common
     command: api-server --host 0.0.0.0 --port 8080
     ports:
-      - "8080:8080"
+      - "8084:8080"
     depends_on:
       airflow-init:
         condition: service_completed_successfully

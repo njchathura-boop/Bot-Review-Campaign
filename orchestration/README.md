@@ -47,7 +47,7 @@ this directory:
 
 ```powershell
 docker compose -f orchestration/docker-compose.airflow.yml up airflow-init
-docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-scheduler airflow-api-server
+docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-dag-processor airflow-scheduler airflow-api-server
 ```
 
 Open `http://localhost:8080` and sign in with the configured admin credentials (the

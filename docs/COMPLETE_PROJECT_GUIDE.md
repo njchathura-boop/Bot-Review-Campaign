@@ -219,11 +219,12 @@ run `dvc repro` to create `dvc.lock`, then commit metadata and run `dvc push` to
 remote such as `..\dvc-storage` or `s3://bucket/prefix`. Details are in
 `docs/GIT_AND_DVC_COMMANDS.md`.
 
-Tag a reviewed release with `git tag -a v1.1.0 -m "Bot campaign detection v1.1.0"` and
-`git push origin v1.1.0`. CD builds a Git-SHA GHCR image, scans it, renders Kubernetes,
-deploys staging, waits for rollout, and calls `/health/ready`. Configure the protected
+Tag a reviewed release with `git tag -a v1.2.0 -m "Detectra v1.2.0"` and
+`git push origin v1.2.0`. CD builds Git-SHA API and jobs images, scans both, renders
+Kubernetes, deploys staging, waits for rollout, and calls `/health/ready`. Configure the protected
 GitHub `staging` environment with `KUBE_CONFIG_DATA`. Argo CD watches the deployment
-manifest. Roll back with `kubectl -n bot-campaign rollout undo deployment/bot-campaign-api`.
+manifest. Roll back with `kubectl -n bot-campaign rollout undo deployment/detectra-api`.
+See `k8s/README.md` for the complete deployment procedure.
 
 ## 13. Tests and demonstration
 

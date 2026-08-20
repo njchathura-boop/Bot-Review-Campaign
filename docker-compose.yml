@@ -223,6 +223,24 @@ services:
       elasticsearch:
         condition: service_healthy
 
+  # Filebeat reads Docker's JSON logs, enriches them with Docker/Compose metadata,
+  # and writes them to Elasticsearch. Kibana then searches the resulting filebeat-* data.
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.3
+    profiles: ["observability"]
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./monitoring/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - filebeat-data:/usr/share/filebeat/data
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_started
+
   ray-head:
     <<: *ray-runtime
     command: ["ray", "start", "--head", "--port=6379", "--dashboard-host=0.0.0.0", "--metrics-export-port=8080", "--block"]
@@ -355,3 +373,4 @@ volumes:
   prometheus-data:
   grafana-data:
   elasticsearch-data:
+  filebeat-data:

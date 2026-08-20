@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
+from time import perf_counter
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +11,9 @@ from .config import Settings
 from .routes import campaigns, demo, operations, reviews
 from .runtime import TrustRuntime
 from .streaming_runtime import KafkaCampaignAlertConsumer
+
+
+LOGGER = logging.getLogger("bot_campaign.http")
 
 
 def create_app(
@@ -45,6 +50,27 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.runtime = service
+
+    @app.middleware("http")
+    async def collect_http_metrics(request, call_next):
+        """Count request outcomes without making observability part of scoring logic."""
+        started = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            service.metrics.record_http_request((perf_counter() - started) * 1_000, 500)
+            raise
+        if request.url.path != "/metrics":
+            service.metrics.record_http_request(
+                (perf_counter() - started) * 1_000, response.status_code
+            )
+            if response.status_code >= 400:
+                LOGGER.warning(
+                    "http_request_failed method=%s path=%s status=%s",
+                    request.method, request.url.path, response.status_code,
+                )
+        return response
+
     app.include_router(reviews.router)
     app.include_router(campaigns.router)
     app.include_router(demo.router)

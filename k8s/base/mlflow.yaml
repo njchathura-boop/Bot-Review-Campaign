@@ -25,6 +25,7 @@ spec:
           command: [sh, -c, "mkdir -p /mlflow/artifacts && chown -R 1000:1000 /mlflow"]
           securityContext:
             runAsUser: 0
+            runAsNonRoot: false
           volumeMounts:
             - name: mlflow
               mountPath: /mlflow

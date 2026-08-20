@@ -254,9 +254,9 @@ It runs for semantic version tags (`v*`) or from `workflow_dispatch`:
 
 ```text
 Git tag
-  -> Build API/UI and ETL/training images with Git SHA
-  -> Push both images to GHCR
-  -> Trivy scan both images
+  -> Build API/UI, ETL/training, and Airflow images with Git SHA
+  -> Push all three images to GHCR
+  -> Trivy scan all three images
   -> Render the k8s Kustomize base with exact images
   -> Deploy staging
   -> Wait for API, Ray, MLflow, Prometheus, and Grafana

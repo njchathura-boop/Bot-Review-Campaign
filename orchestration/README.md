@@ -25,11 +25,12 @@ submit temporal ETL Ray Job
   -> wait without occupying an Airflow worker slot
 ```
 
-The first job rebuilds the observed behavior profile and the group-isolated
-`campaign_v3` train/validation/test splits from the configured Amazon JSONL inputs. It
-executes `build-temporal-bundle` and then `generate-campaign-splits` inside the project
-Ray image. This makes Airflow the workflow orchestrator while keeping the ETL and model
-dependencies in the reproducible project image.
+The first job runs `dvc repro build_temporal_bundle build_dataset_bundle` inside the
+project Ray image. `dvc.yaml` is therefore the single source of truth for all Amazon
+categories, labelled inputs, seeds, scenario counts, dependencies, and outputs. When a
+DVC remote is configured, the job restores `data/raw.dvc` first and pushes successful
+outputs. This keeps Airflow as the workflow orchestrator without duplicating ETL settings
+inside the DAG.
 
 It defaults to manual triggering because full DistilBERT training is expensive. Set a
 cron only after a full manual run passes acceptance checks. The DAG registers model
@@ -50,7 +51,7 @@ docker compose -f orchestration/docker-compose.airflow.yml up airflow-init
 docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-dag-processor airflow-scheduler airflow-api-server
 ```
 
-Open `http://localhost:8080` and sign in with the configured admin credentials (the
+Open `http://localhost:8084` and sign in with the configured admin credentials (the
 development defaults are `admin`/`admin`). The Compose file mounts this repository's DAG
 and project root directly; no second copy of the DAG is required. Set a strong Fernet
 key and admin password through environment variables before sharing the stack.
@@ -68,12 +69,9 @@ Add these environment values to the common Airflow environment:
 ```yaml
 environment:
   BOT_CAMPAIGN_RAY_JOBS_URL: http://host.docker.internal:8265
+  BOT_CAMPAIGN_MLFLOW_URI: http://mlflow:5000
   BOT_CAMPAIGN_GPUS_PER_TRIAL: "1"
   BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS: "1"
-  BOT_CAMPAIGN_BEHAVIORAL_INPUTS: data/raw/amazon_all_beauty_sample.jsonl
-  BOT_CAMPAIGN_TEMPORAL_ROOT: data/processed/temporal_bundle
-  BOT_CAMPAIGN_CAMPAIGN_SCENARIO_COUNT: "2000"
-  BOT_CAMPAIGN_DATA_SEED: "42"
   # Leave unset for manual-only runs. Example weekly Sunday at 02:00 UTC:
   # BOT_CAMPAIGN_RETRAIN_CRON: "0 2 * * 0"
 ```

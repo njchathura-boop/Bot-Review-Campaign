@@ -15,6 +15,10 @@ scaled independently.
 | Experiment tracking | `Deployment/detectra-mlflow` | official MLflow image | Stores trial parameters, metrics, artifacts, and model registrations |
 | Metrics database | `Deployment/detectra-prometheus` | official Prometheus image | Discovers annotated pods and scrapes API and Ray metrics every 15 seconds |
 | Monitoring UI | `Deployment/detectra-grafana` | official Grafana image | Provides the pre-provisioned **Detectra Kubernetes Overview** dashboard |
+| Log database | `StatefulSet/detectra-elasticsearch` | official Elasticsearch image | Persists platform logs in the observability and full profiles |
+| Log collector | `DaemonSet/detectra-filebeat` | official Filebeat image | Enriches Kubernetes container logs with pod metadata |
+| Log UI | `Deployment/detectra-kibana` | official Kibana image | Searches `detectra-logs-*` in the observability and full profiles |
+| Workflow orchestration | Airflow API, scheduler, DAG processor, and PostgreSQL | `bot-review-campaign-airflow` | Schedules ETL and submits monitored Ray jobs in the full profiles |
 
 The monitoring tier deliberately uses separate Prometheus and Grafana pods. Combining
 them in one pod would couple storage, upgrades, health checks, and failure recovery.
@@ -23,17 +27,19 @@ replicas only after that state is moved to PostgreSQL or Redis.
 
 ## Images people can pull
 
-The release workflow publishes two images:
+The release workflow publishes three project images to GitHub Container Registry:
 
 ```text
 ghcr.io/njchathura-boop/bot-review-campaign-api:<git-sha>
 ghcr.io/njchathura-boop/bot-review-campaign-jobs:<git-sha>
+ghcr.io/njchathura-boop/bot-review-campaign-airflow:<git-sha>
 ```
 
 The API image contains the UI and the two promoted model bundles, so inference never
 silently falls back to an untrained model. The jobs image contains the ETL, DVC, Ray,
-DistilBERT training, and campaign-training code. Git-SHA tags are immutable; `latest` is
-only a convenient pointer to the newest published release.
+DistilBERT training, and campaign-training code. The Airflow image contains the pinned
+Airflow runtime and reviewed project DAGs. Git-SHA tags are immutable; `latest` is only
+a convenient pointer to the newest published release.
 
 Make both GHCR packages public in **GitHub -> Packages -> Package settings -> Change
 visibility**, or configure a Kubernetes `imagePullSecret` for a private package.
@@ -42,7 +48,8 @@ visibility**, or configure a Kubernetes `imagePullSecret` for a private package.
 
 - Kubernetes 1.27 or newer and `kubectl`; Docker Desktop Kubernetes is suitable for a demo.
 - A dynamic default StorageClass.
-- At least 8 CPU cores, 16 GB RAM, and 75 GB free cluster storage for the complete stack.
+- Core: at least 8 CPU cores, 16 GB RAM, and 75 GB free cluster storage.
+- Full Airflow + Elastic stack: at least 12 CPU cores, 24 GB RAM, and 110 GB free storage.
 - Git LFS when building locally because the promoted model files are LFS objects.
 - A DVC object-store remote for portable ETL data. S3-compatible storage is supported.
 - For GPU training: an NVIDIA GPU, container runtime support, and the NVIDIA Kubernetes
@@ -61,9 +68,11 @@ git tag -a v1.2.0 -m "Detectra v1.2.0"
 git push origin v1.2.0
 ```
 
-The `cd` workflow checks out LFS objects, verifies both model files, builds both images,
-tags each image with the exact Git SHA, scans them with Trivy, pushes them to GHCR, and
-deploys the same immutable SHA to the protected `staging` environment.
+The `cd` workflow checks out LFS objects, verifies both model files, builds all three
+images, tags them with the exact Git SHA, scans each with Trivy, and pushes them to GHCR.
+Staging deliberately deploys the core overlay only because the full overlay needs
+cluster-owned Airflow secrets and more capacity. Promote the same SHA with `-Full` after
+those prerequisites have been configured.
 
 For a local build:
 
@@ -78,9 +87,13 @@ docker build --build-arg "RELEASE_VERSION=local" --build-arg "SOURCE_COMMIT=$sha
 docker build --build-arg "RELEASE_VERSION=local" --build-arg "SOURCE_COMMIT=$sha" `
   --tag "$registry/bot-review-campaign-jobs:$sha" --file docker/ray.Dockerfile .
 
+docker build --build-arg "RELEASE_VERSION=local" --build-arg "SOURCE_COMMIT=$sha" `
+  --tag "$registry/bot-review-campaign-airflow:$sha" --file docker/airflow.Dockerfile .
+
 docker login ghcr.io
 docker push "$registry/bot-review-campaign-api:$sha"
 docker push "$registry/bot-review-campaign-jobs:$sha"
+docker push "$registry/bot-review-campaign-airflow:$sha"
 ```
 
 Before pushing, smoke-test the self-contained API image:
@@ -141,9 +154,48 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_kuberne
   -ImageTag $sha -Gpu
 ```
 
+Deployment profiles:
+
+```powershell
+# Core API, Ray, ETL, MLflow, Prometheus, and Grafana
+.\scripts\deploy_kubernetes.ps1 -ImageTag $sha
+
+# Core plus Elasticsearch, Filebeat, and Kibana
+.\scripts\deploy_kubernetes.ps1 -ImageTag $sha -Observability
+
+# Core plus Elastic/Kibana/Filebeat and Airflow/PostgreSQL
+.\scripts\deploy_kubernetes.ps1 -ImageTag $sha -Full
+
+# Full platform with NVIDIA Ray/Airflow trial settings
+.\scripts\deploy_kubernetes.ps1 -ImageTag $sha -Full -Gpu
+```
+
+Before `-Full`, create the Airflow secret. The example file documents field names but
+must never be populated and committed:
+
+```powershell
+kubectl apply -f k8s/base/namespace.yaml
+$postgresPassword = Read-Host "Airflow PostgreSQL password"
+$fernetKey = python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+$jwtSecret = python -c "import secrets; print(secrets.token_urlsafe(48))"
+$databaseUri = "postgresql+psycopg2://airflow:$postgresPassword@detectra-airflow-postgres:5432/airflow"
+$simpleAuth = '{"admin":"REPLACE_WITH_A_STRONG_PASSWORD"}'
+
+kubectl -n bot-campaign create secret generic detectra-airflow-secrets `
+  --from-literal=postgres-password="$postgresPassword" `
+  --from-literal=database-uri="$databaseUri" `
+  --from-literal=fernet-key="$fernetKey" `
+  --from-literal=jwt-secret="$jwtSecret" `
+  --from-literal=simple-auth-passwords.json="$simpleAuth"
+```
+
+If the password contains URI-reserved characters, URL-encode it before constructing
+`database-uri`. For a shared cluster, use Vault/External Secrets instead of CLI literals.
+
 Without the helper script, `kubectl apply -k k8s` deploys the CPU stack with `latest`.
 `kubectl apply -k k8s/overlays/gpu` deploys the GPU overlay. The helper is preferred
-because it pins the API, Ray, and ETL workloads to one immutable SHA.
+because it renders the selected overlay first and pins API, Ray/ETL, and Airflow
+workloads—including the immutable migration Job—to one Git SHA before applying it.
 
 Inspect startup:
 
@@ -163,6 +215,9 @@ kubectl -n bot-campaign port-forward service/detectra-ray 8265:8265
 kubectl -n bot-campaign port-forward service/detectra-mlflow 5001:5000
 kubectl -n bot-campaign port-forward service/detectra-prometheus 9090:9090
 kubectl -n bot-campaign port-forward service/detectra-grafana 3000:3000
+kubectl -n bot-campaign port-forward service/detectra-elasticsearch 9200:9200
+kubectl -n bot-campaign port-forward service/detectra-kibana 5601:5601
+kubectl -n bot-campaign port-forward service/detectra-airflow-api 8084:8080
 ```
 
 | URL | Expected result |
@@ -173,6 +228,9 @@ kubectl -n bot-campaign port-forward service/detectra-grafana 3000:3000
 | `http://localhost:5001` | MLflow experiments |
 | `http://localhost:9090/targets` | `detectra-api` and `detectra-ray` targets are `UP` |
 | `http://localhost:3000/dashboards` | Detectra folder and pre-provisioned dashboard |
+| `http://localhost:9200/_cluster/health` | Elasticsearch health JSON (observability/full) |
+| `http://localhost:5601` | Kibana log search (observability/full) |
+| `http://localhost:8084` | Airflow DAG and task state (full) |
 
 Generate live metrics by scanning and replaying examples in the UI. In Prometheus, query
 `review_scans_total`, `campaign_alerts_total`, `api_request_latency_p95_ms`, or
@@ -220,9 +278,11 @@ kubectl apply -k k8s/jobs
 kubectl -n bot-campaign logs -f job/detectra-review-training
 ```
 
-The committed job requests 20 Ray Tune samples, two epochs per trial, and one concurrent
-trial. Change those values deliberately in `k8s/jobs/review-training-job.yaml`. The GPU
-overlay gives the Ray pod one NVIDIA GPU and sets one GPU per trial.
+The committed job requests 20 Ray Tune samples, up to 20 epochs per trial, and one
+concurrent trial. Change those values deliberately in
+`k8s/jobs/review-training-job.yaml`. The GPU overlay gives the Ray pod one NVIDIA GPU
+and sets one GPU per trial. ASHA may stop weak trials early; 20 is the maximum, not a
+promise that every trial completes all 20 epochs.
 
 Training writes checkpoints to the workspace PVC and experiments to MLflow. A successful
 training run does **not** mutate the serving pod. Promotion is explicit: review the MLflow
@@ -254,6 +314,9 @@ Render manifests without changing a cluster:
 ```powershell
 kubectl kustomize k8s
 kubectl kustomize k8s/overlays/gpu
+kubectl kustomize k8s/overlays/observability
+kubectl kustomize k8s/overlays/full
+kubectl kustomize k8s/overlays/full-gpu
 kubectl kustomize k8s/jobs
 ```
 

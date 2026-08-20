@@ -80,6 +80,7 @@ spec:
           command: [sh, -c, "chown -R 472:472 /var/lib/grafana"]
           securityContext:
             runAsUser: 0
+            runAsNonRoot: false
           volumeMounts:
             - name: data
               mountPath: /var/lib/grafana

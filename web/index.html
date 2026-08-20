@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Ecommerce review trust and campaign detection demo">
   <title>Detectra | Review Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260819-onboarding">
+  <link rel="stylesheet" href="/styles.css?v=20260820-release">
 </head>
 <body>
   <header class="topbar">
@@ -131,60 +131,70 @@
 
     <section id="workflow" class="section workflow">
       <div class="section-heading">
-        <div><p class="eyebrow">07 / LOCAL ONBOARDING</p><h2>Run Detectra on your machine</h2></div>
-        <p>A developer path from a fresh clone to a live review, streaming campaign,
-          and observable result. Training is optional for normal local serving.</p>
+        <div><p class="eyebrow">07 / SHIP IT</p><h2>From clone to a live trust stack</h2></div>
+        <p>Choose a lightweight local demo or the complete Kubernetes platform. Every
+          project image is published with the same immutable Git commit tag.</p>
       </div>
-      <ol class="onboard-flow" aria-label="Local developer setup flow">
+      <ol class="onboard-flow" aria-label="Developer release flow">
         <li><span class="step-number">01</span><div class="step-copy"><strong>Clone + install</strong><span>Python 3.11 or 3.12, Git, DVC, and Docker Desktop</span></div></li>
-        <li><span class="step-number">02</span><div class="step-copy"><strong>Restore data</strong><span>Configure the team DVC remote and pull, or rebuild from raw inputs</span></div></li>
-        <li><span class="step-number">03</span><div class="step-copy"><strong>Check artifacts</strong><span>Review and campaign model folders must exist before API startup</span></div></li>
-        <li><span class="step-number">04</span><div class="step-copy"><strong>Start the stack</strong><span>API, Kafka, Spark, scorer, MLflow, Prometheus, Grafana, and Kibana</span></div></li>
-        <li><span class="step-number">05</span><div class="step-copy"><strong>Replay a campaign</strong><span>The UI publishes reviews and shows the scored campaign path</span></div></li>
-        <li><span class="step-number">06</span><div class="step-copy"><strong>Verify + observe</strong><span>Read service probes, dashboards, logs, lineage, and tests</span></div></li>
+        <li><span class="step-number">02</span><div class="step-copy"><strong>Restore versions</strong><span>DVC restores data; Git LFS restores promoted model artifacts</span></div></li>
+        <li><span class="step-number">03</span><div class="step-copy"><strong>Launch a profile</strong><span>Core, observable, or full Airflow stack—without duplicate services</span></div></li>
+        <li><span class="step-number">04</span><div class="step-copy"><strong>Replay traffic</strong><span>Kafka carries reviews while Spark creates event-time windows</span></div></li>
+        <li><span class="step-number">05</span><div class="step-copy"><strong>Inspect evidence</strong><span>FastAPI and the UI keep review risk separate from campaign risk</span></div></li>
+        <li><span class="step-number">06</span><div class="step-copy"><strong>Observe + improve</strong><span>Grafana metrics, Kibana logs, MLflow lineage, and safe retraining</span></div></li>
       </ol>
 
-      <div class="onboard-grid">
-        <article class="onboard-card quickstart-card">
-          <p class="card-kicker">FAST PATH</p>
-          <h3>Start an already-trained workspace</h3>
-          <pre><code>python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev,mlops,streaming,ui]"
-# after configuring the shared DVC remote
-python -m dvc pull
-
-docker compose --profile stream --profile observability up -d `
-  api kafka kafka-init spark-master spark-worker spark-stream `
-  campaign-scorer mlflow prometheus grafana elasticsearch kibana</code></pre>
+      <div class="launch-grid">
+        <article class="launch-card local-launch">
+          <div class="launch-card-head"><span class="launch-icon" aria-hidden="true">⌁</span><div><p class="card-kicker">LOCAL DEMO</p><h3>Start the trained workspace</h3></div></div>
+          <p>Best for development and a live classroom demonstration. Training remains optional.</p>
+          <pre class="command-block"><code>.\scripts\start_detectra.ps1 -Observability -Build
+.\scripts\start_airflow.ps1</code></pre>
+          <div class="profile-chips" aria-label="Local services"><span>API + UI</span><span>Kafka + Spark</span><span>MLflow</span><span>Grafana</span><span>Kibana</span><span>Airflow</span></div>
         </article>
-        <article class="onboard-card verify-card">
-          <p class="card-kicker">VERIFY</p>
-          <h3>Know when it is ready</h3>
-          <ul class="readiness-list">
-            <li><code>localhost:8000</code><span>Detectra UI + FastAPI</span></li>
-            <li><code>localhost:8082</code><span>Spark stream is active</span></li>
-            <li><code>localhost:5001</code><span>MLflow experiments</span></li>
-            <li><code>localhost:3000</code><span>Grafana dashboards</span></li>
-            <li><code>localhost:5601</code><span>Kibana logs</span></li>
-            <li><code>localhost:8265</code><span>Ray training cluster (optional)</span></li>
-          </ul>
-          <pre class="compact-code"><code>docker compose ps
-Invoke-RestMethod http://localhost:8000/health/ready
-Invoke-RestMethod http://localhost:8000/v1/ops/summary</code></pre>
+        <article class="launch-card cluster-launch">
+          <div class="launch-card-head"><span class="launch-icon" aria-hidden="true">◇</span><div><p class="card-kicker">KUBERNETES</p><h3>Deploy one immutable release</h3></div></div>
+          <p>The full profile includes Elastic, Kibana, Filebeat, and Airflow. Use the Git SHA created by the release workflow.</p>
+          <pre class="command-block"><code>.\scripts\deploy_kubernetes.ps1 `
+  -ImageTag &lt;git-sha&gt; -Full
+
+# add -Gpu for NVIDIA training</code></pre>
+          <div class="profile-chips" aria-label="Kubernetes profiles"><span>Core</span><span>Observability</span><span>Full</span><span>Full GPU</span></div>
         </article>
       </div>
 
-      <aside class="space-rescue" aria-label="Safe Docker disk cleanup">
-        <div><p class="card-kicker">LOW DISK?</p><h3>Clear rebuildable Docker cache safely</h3>
-          <p>This removes unused build layers, not named volumes. Do not add
-            <code>--volumes</code> if you want to retain MLflow and monitoring history.</p></div>
-        <pre class="compact-code"><code>docker builder prune --all --force
-docker system df</code></pre>
-      </aside>
+      <div class="release-details">
+        <article class="registry-panel">
+          <p class="card-kicker">GHCR RELEASE REGISTRY</p>
+          <h3>Three images. One Git SHA.</h3>
+          <div class="registry-list">
+            <a href="https://github.com/njchathura-boop/Bot-Review-Campaign/pkgs/container/bot-review-campaign-api" target="_blank" rel="noopener"><span>API / UI / inference</span><code>bot-review-campaign-api:&lt;sha&gt;</code></a>
+            <a href="https://github.com/njchathura-boop/Bot-Review-Campaign/pkgs/container/bot-review-campaign-jobs" target="_blank" rel="noopener"><span>ETL / Ray training</span><code>bot-review-campaign-jobs:&lt;sha&gt;</code></a>
+            <a href="https://github.com/njchathura-boop/Bot-Review-Campaign/pkgs/container/bot-review-campaign-airflow" target="_blank" rel="noopener"><span>Airflow + project DAGs</span><code>bot-review-campaign-airflow:&lt;sha&gt;</code></a>
+          </div>
+        </article>
 
-      <p class="runbook-link">Need the full data-build, training, Airflow, Kubernetes,
-        CI/CD, or rollback procedure? Open <code>docs/END_TO_END_RUNBOOK.md</code>.</p>
+        <article class="service-directory">
+          <p class="card-kicker">OPEN THE STACK</p>
+          <h3>Service directory</h3>
+          <div class="service-links">
+            <a href="http://localhost:8000" target="_blank" rel="noopener"><strong>8000</strong><span>Detectra</span></a>
+            <a href="http://localhost:8084" target="_blank" rel="noopener"><strong>8084</strong><span>Airflow</span></a>
+            <a href="http://localhost:8265" target="_blank" rel="noopener"><strong>8265</strong><span>Ray</span></a>
+            <a href="http://localhost:5001" target="_blank" rel="noopener"><strong>5001</strong><span>MLflow</span></a>
+            <a href="http://localhost:9090" target="_blank" rel="noopener"><strong>9090</strong><span>Prometheus</span></a>
+            <a href="http://localhost:3000" target="_blank" rel="noopener"><strong>3000</strong><span>Grafana</span></a>
+            <a href="http://localhost:5601" target="_blank" rel="noopener"><strong>5601</strong><span>Kibana</span></a>
+            <a href="http://localhost:9200/_cluster/health" target="_blank" rel="noopener"><strong>9200</strong><span>Elastic</span></a>
+          </div>
+        </article>
+      </div>
+
+      <div class="operator-strip">
+        <div><p class="card-kicker">VERIFY</p><code>Invoke-RestMethod http://localhost:8000/health/ready</code></div>
+        <div><p class="card-kicker">LOW DISK</p><code>docker builder prune --all --force</code><small>Build cache only; keep named volumes.</small></div>
+        <div><p class="card-kicker">FULL GUIDE</p><a href="https://github.com/njchathura-boop/Bot-Review-Campaign/blob/feature/njc/k8s/README.md" target="_blank" rel="noopener">Open the Kubernetes runbook →</a></div>
+      </div>
     </section>
   </main>
   <footer>Detectra | Responsible review intelligence demo | Individual risk never auto-blocks a review.</footer>

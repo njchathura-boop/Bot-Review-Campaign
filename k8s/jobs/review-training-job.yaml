@@ -62,7 +62,7 @@ spec:
             - name: RAY_NUM_SAMPLES
               value: "20"
             - name: RAY_EPOCHS
-              value: "2"
+              value: "20"
           resources:
             requests:
               cpu: 100m

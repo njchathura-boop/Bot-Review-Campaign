@@ -63,4 +63,9 @@ def test_review_scan_and_campaign_replay_in_browser():
         campaign_cards = page.locator(".campaign-card")
         campaign_cards.first.wait_for()
         assert campaign_cards.count() >= 1
+
+        page.get_by_role("link", name="How it works").click()
+        page.get_by_role("heading", name="From clone to a live trust stack").wait_for()
+        assert page.get_by_text("Three images. One Git SHA.").is_visible()
+        assert page.get_by_text("bot-review-campaign-airflow:<sha>").is_visible()
         browser.close()

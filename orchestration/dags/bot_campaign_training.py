@@ -21,18 +21,7 @@ RETRAIN_CRON = os.getenv("BOT_CAMPAIGN_RETRAIN_CRON") or None
 GPUS_PER_TRIAL = os.getenv("BOT_CAMPAIGN_GPUS_PER_TRIAL", "0")
 MAX_CONCURRENT_TRIALS = os.getenv("BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS", "1")
 PROJECT_ROOT = "/opt/project"
-TEMPORAL_ROOT = os.getenv(
-    "BOT_CAMPAIGN_TEMPORAL_ROOT", "data/processed/temporal_bundle"
-).strip("/")
-BEHAVIORAL_INPUTS = tuple(
-    value.strip()
-    for value in os.getenv(
-        "BOT_CAMPAIGN_BEHAVIORAL_INPUTS", "data/raw/amazon_all_beauty_sample.jsonl"
-    ).split(",")
-    if value.strip()
-)
-CAMPAIGN_SCENARIO_COUNT = os.getenv("BOT_CAMPAIGN_CAMPAIGN_SCENARIO_COUNT", "2000")
-DATA_SEED = os.getenv("BOT_CAMPAIGN_DATA_SEED", "42")
+MLFLOW_URI = os.getenv("BOT_CAMPAIGN_MLFLOW_URI", "http://mlflow:5000").rstrip("/")
 
 
 def _request(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -63,7 +52,7 @@ def _entrypoint(
         "--ray-address",
         "auto",
         "--mlflow-uri",
-        "http://mlflow:5000",
+        MLFLOW_URI,
         "--ray-storage-path",
         f"{PROJECT_ROOT}/artifacts/ray_results",
         "--train-data",
@@ -83,45 +72,26 @@ def _entrypoint(
 
 
 def _data_entrypoint() -> str:
-    """Build the observed temporal bundle and leakage-safe campaign splits.
+    """Reproduce the authoritative DVC data stages on the Ray workspace.
 
-    The command runs inside the project image on the Ray head, so the Airflow
-    scheduler does not need the project Python dependencies installed locally.
-    Inputs are supplied as a comma-separated environment variable and are
-    never downloaded or mutated by the public API.
+    `dvc.yaml` is the single source of truth for all Amazon categories, labelled
+    inputs, scenario counts, seeds, dependencies, and outputs. The optional
+    Kubernetes storage secret is inherited by the Ray job and restores/pushes
+    versioned objects when a shared DVC remote is configured.
     """
-    inputs = [f"{PROJECT_ROOT}/{value.lstrip('/')}" for value in BEHAVIORAL_INPUTS]
-    build = [
-        "python",
-        "-m",
-        "bot_campaign.cli",
-        "build-temporal-bundle",
-        "--behavioral-input",
-        *inputs,
-        "--output-dir",
-        f"{PROJECT_ROOT}/{TEMPORAL_ROOT}",
-        "--campaign-scenario-count",
-        CAMPAIGN_SCENARIO_COUNT,
-        "--seed",
-        DATA_SEED,
-    ]
-    split = [
-        "python",
-        "-m",
-        "bot_campaign.cli",
-        "generate-campaign-splits",
-        "--profile",
-        f"{PROJECT_ROOT}/{TEMPORAL_ROOT}/behavior/profile.json",
-        "--products",
-        f"{PROJECT_ROOT}/{TEMPORAL_ROOT}/behavior/products.jsonl",
-        "--output-dir",
-        f"{PROJECT_ROOT}/{TEMPORAL_ROOT}/campaign_v3",
-        "--count",
-        CAMPAIGN_SCENARIO_COUNT,
-        "--seed",
-        DATA_SEED,
-    ]
-    return f"{shlex.join(build)} && {shlex.join(split)}"
+    return " && ".join(
+        [
+            f"cd {shlex.quote(PROJECT_ROOT)}",
+            "if [ -n \"${DVC_REMOTE_URL:-}\" ]; then "
+            "dvc remote add --local --force \"${DVC_REMOTE_NAME:-kubernetes}\" "
+            "\"$DVC_REMOTE_URL\" && "
+            "dvc remote default \"${DVC_REMOTE_NAME:-kubernetes}\" && "
+            "dvc pull data/raw.dvc; fi",
+            "test -f data/raw/product_reviews.jsonl",
+            "dvc repro build_temporal_bundle build_dataset_bundle",
+            "if [ -n \"${DVC_REMOTE_URL:-}\" ]; then dvc push; fi",
+        ]
+    )
 
 
 def submit_ray_job(*, model: str) -> str:

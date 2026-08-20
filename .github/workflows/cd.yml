@@ -18,6 +18,7 @@ env:
   REGISTRY: ghcr.io
   API_IMAGE: ghcr.io/njchathura-boop/bot-review-campaign-api
   JOBS_IMAGE: ghcr.io/njchathura-boop/bot-review-campaign-jobs
+  AIRFLOW_IMAGE: ghcr.io/njchathura-boop/bot-review-campaign-airflow
 
 jobs:
   publish:
@@ -26,6 +27,7 @@ jobs:
     outputs:
       api_image: ${{ steps.identity.outputs.api_image }}
       jobs_image: ${{ steps.identity.outputs.jobs_image }}
+      airflow_image: ${{ steps.identity.outputs.airflow_image }}
       sha: ${{ steps.identity.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +43,7 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "api_image=${API_IMAGE}:$sha" >> "$GITHUB_OUTPUT"
           echo "jobs_image=${JOBS_IMAGE}:$sha" >> "$GITHUB_OUTPUT"
+          echo "airflow_image=${AIRFLOW_IMAGE}:$sha" >> "$GITHUB_OUTPUT"
 
       - name: Verify promoted Git LFS model bundles
         shell: bash
@@ -86,6 +89,21 @@ jobs:
           cache-from: type=gha,scope=jobs
           cache-to: type=gha,mode=max,scope=jobs
 
+      - name: Build and push Airflow orchestration image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/airflow.Dockerfile
+          push: true
+          build-args: |
+            RELEASE_VERSION=${{ github.ref_name }}
+            SOURCE_COMMIT=${{ steps.identity.outputs.sha }}
+          tags: |
+            ${{ steps.identity.outputs.airflow_image }}
+            ${{ env.AIRFLOW_IMAGE }}:latest
+          cache-from: type=gha,scope=airflow
+          cache-to: type=gha,mode=max,scope=airflow
+
       - name: Scan API/UI image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -113,6 +131,20 @@ jobs:
 
       - name: Enforce ETL/training vulnerability policy
         run: python scripts/enforce_trivy.py trivy-jobs.json
+
+      - name: Scan Airflow orchestration image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.identity.outputs.airflow_image }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: json
+          output: trivy-airflow.json
+          exit-code: "0"
+
+      - name: Enforce Airflow vulnerability policy
+        run: python scripts/enforce_trivy.py trivy-airflow.json
 
   deploy-staging:
     name: Deploy staging and smoke test
@@ -171,4 +203,5 @@ jobs:
         run: |
           echo "API:  ${{ needs.publish.outputs.api_image }}"
           echo "Jobs: ${{ needs.publish.outputs.jobs_image }}"
+          echo "Airflow: ${{ needs.publish.outputs.airflow_image }}"
           kubectl -n bot-campaign get pods,services,cronjobs

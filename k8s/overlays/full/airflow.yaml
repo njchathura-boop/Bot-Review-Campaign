@@ -1,0 +1,392 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: detectra-airflow-config
+data:
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/secrets/simple_auth-passwords.json
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://detectra-airflow-api:8080/execution/
+  BOT_CAMPAIGN_RAY_JOBS_URL: http://detectra-ray:8265
+  BOT_CAMPAIGN_MLFLOW_URI: http://detectra-mlflow:5000
+  BOT_CAMPAIGN_API_URL: http://detectra-api:8000
+  BOT_CAMPAIGN_GPUS_PER_TRIAL: "0"
+  BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS: "1"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: detectra-airflow-postgres
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: detectra-airflow-postgres
+spec:
+  serviceName: detectra-airflow-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: detectra-airflow-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-airflow-postgres
+        app.kubernetes.io/component: orchestration-database
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: initialize-storage
+          image: busybox:1.36.1
+          command: [sh, -c, "mkdir -p /var/lib/postgresql/data/pgdata && chown -R 999:999 /var/lib/postgresql/data"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_USER
+              value: airflow
+            - name: POSTGRES_DB
+              value: airflow
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: postgres-password
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, airflow, -d, airflow]
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: detectra-airflow-postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: detectra-airflow-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: detectra-airflow-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: detectra-airflow-migrate
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-airflow-migrate
+        app.kubernetes.io/component: orchestration-migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: detectra-airflow
+          command: [airflow, db, migrate]
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: fernet-key
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-airflow-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: detectra-airflow-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-airflow-api
+        app.kubernetes.io/component: orchestration-api
+    spec:
+      initContainers:
+        - name: wait-for-migrations
+          image: detectra-airflow
+          command: [airflow, db, check-migrations, --migration-wait-timeout, "300"]
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+      containers:
+        - name: api
+          image: detectra-airflow
+          command: [airflow, api-server, --host, 0.0.0.0, --port, "8080"]
+          envFrom:
+            - configMapRef:
+                name: detectra-airflow-config
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: fernet-key
+            - name: AIRFLOW__API_AUTH__JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: jwt-secret
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /api/v2/monitor/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/v2/monitor/health
+              port: http
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 300m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: passwords
+              mountPath: /opt/airflow/secrets
+              readOnly: true
+      volumes:
+        - name: passwords
+          secret:
+            secretName: detectra-airflow-secrets
+            items:
+              - key: simple-auth-passwords.json
+                path: simple_auth-passwords.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: detectra-airflow-api
+spec:
+  selector:
+    app.kubernetes.io/name: detectra-airflow-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-airflow-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: detectra-airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-airflow-scheduler
+        app.kubernetes.io/component: orchestration-scheduler
+    spec:
+      initContainers:
+        - name: wait-for-migrations
+          image: detectra-airflow
+          command: [airflow, db, check-migrations, --migration-wait-timeout, "300"]
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+      containers:
+        - name: scheduler
+          image: detectra-airflow
+          command: [airflow, scheduler]
+          envFrom:
+            - configMapRef:
+                name: detectra-airflow-config
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: fernet-key
+            - name: AIRFLOW__API_AUTH__JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: jwt-secret
+          resources:
+            requests:
+              cpu: 300m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: passwords
+              mountPath: /opt/airflow/secrets
+              readOnly: true
+      volumes:
+        - name: passwords
+          secret:
+            secretName: detectra-airflow-secrets
+            items:
+              - key: simple-auth-passwords.json
+                path: simple_auth-passwords.json
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-airflow-dag-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: detectra-airflow-dag-processor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-airflow-dag-processor
+        app.kubernetes.io/component: orchestration-dag-processor
+    spec:
+      initContainers:
+        - name: wait-for-migrations
+          image: detectra-airflow
+          command: [airflow, db, check-migrations, --migration-wait-timeout, "300"]
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+      containers:
+        - name: dag-processor
+          image: detectra-airflow
+          command: [airflow, dag-processor]
+          envFrom:
+            - configMapRef:
+                name: detectra-airflow-config
+          env:
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: database-uri
+            - name: AIRFLOW__CORE__FERNET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: fernet-key
+            - name: AIRFLOW__API_AUTH__JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-airflow-secrets
+                  key: jwt-secret
+          resources:
+            requests:
+              cpu: 300m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: passwords
+              mountPath: /opt/airflow/secrets
+              readOnly: true
+      volumes:
+        - name: passwords
+          secret:
+            secretName: detectra-airflow-secrets
+            items:
+              - key: simple-auth-passwords.json
+                path: simple_auth-passwords.json

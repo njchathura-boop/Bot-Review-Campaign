@@ -30,6 +30,7 @@ spec:
           command: [sh, -c, "mkdir -p /workspace/data /workspace/artifacts /workspace/reports"]
           securityContext:
             runAsUser: 0
+            runAsNonRoot: false
           volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -48,6 +49,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: detectra-config
+            - secretRef:
+                name: detectra-storage
+                optional: true
           env:
             - name: MLFLOW_TRACKING_URI
               value: http://detectra-mlflow:5000

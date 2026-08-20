@@ -439,7 +439,7 @@ python training/ray_train.py `
   --validation-data data/processed/temporal_bundle/campaign_v3/validation.jsonl `
   --test-data data/processed/temporal_bundle/campaign_v3/test.jsonl `
   --num-samples 12 `
-  --epochs 4 `
+  --epochs 20 `
   --cpus-per-trial 4 `
   --gpus-per-trial 1
 ```
@@ -453,13 +453,78 @@ until campaign recall and legitimate-burst false-positive gates also pass.
 Airflow is the outer scheduler; Ray Tune remains the inner hyperparameter scheduler.
 Mount `orchestration/dags` into the Airflow 3 scheduler/worker and configure the Ray Jobs
 and input variables described in [`orchestration/README.md`](orchestration/README.md).
-The DAG runs:
+The DAG is a six-task relay. It runs only one complete retraining run at a time
+(`max_active_runs=1`), does not backfill old dates (`catchup=False`), and follows the
+`BOT_CAMPAIGN_RETRAIN_CRON` schedule. If that variable is empty, trigger it manually.
 
 ```text
-temporal ETL + campaign split generation
-  -> review DistilBERT Ray job
-  -> campaign hybrid Ray job
+submit_temporal_etl
+        |
+wait_for_temporal_etl
+        |
+submit_review_training
+        |
+wait_for_review_training
+        |
+submit_campaign_training
+        |
+wait_for_campaign_training
 ```
+
+### What each Airflow task does
+
+| Task | What it does | What it triggers or checks |
+|---|---|---|
+| `submit_temporal_etl` | Starts the data-preparation stage through the Ray Jobs API. | Runs `build-temporal-bundle`, then `generate-campaign-splits`; writes `data/processed/temporal_bundle/` and `campaign_v3/`. |
+| `wait_for_temporal_etl` | Polls the submitted Ray job every 60 seconds. | Continues only when Ray reports `SUCCEEDED`; fails on `FAILED` or `STOPPED`. |
+| `submit_review_training` | Starts individual-review model training. | Runs `training/ray_review_train.py` on the text train/validation/test JSONL files. |
+| `wait_for_review_training` | Monitors the review training submission. | Uses the submission ID saved by Airflow XCom; `reschedule` releases the Airflow worker while waiting. |
+| `submit_campaign_training` | Starts coordinated-campaign model training. | Runs `training/ray_train.py` on the `campaign_v3` splits and writes `artifacts/candidates/campaign_model/`. |
+| `wait_for_campaign_training` | Monitors campaign training until completion. | The DAG finishes only after Ray reports that the campaign job succeeded. |
+
+Airflow does not perform the expensive training itself. It sends commands to Ray,
+stores each Ray submission ID in XCom, and starts the next stage only after the previous
+stage succeeds. Ray Tune performs the trials and MLflow records parameters, metrics,
+epochs, artifacts, and model versions. New runs use up to 12 trials, a maximum of 20
+epochs per trial, and ASHA early stopping.
+
+The two data commands run in the project image on the Ray head, so the Airflow scheduler
+does not need the project ML dependencies installed locally. The training commands use
+the MLflow endpoint `http://mlflow:5000` and Ray storage at
+`artifacts/ray_results/`.
+
+### Trigger the DAG manually
+
+```powershell
+docker compose -f orchestration/docker-compose.airflow.yml exec airflow-api-server `
+  airflow dags trigger bot_campaign_model_retraining
+```
+
+For GPU trials, start Ray with the GPU overlay and start Airflow with GPU submission
+settings before triggering the DAG:
+
+```powershell
+.\scripts\start_detectra.ps1 -Gpu
+.\scripts\start_airflow.ps1 -Gpu
+```
+
+`-Gpu` sets `BOT_CAMPAIGN_GPUS_PER_TRIAL=1` for the Ray submissions. Ray must report
+an available GPU in `ray status`; otherwise the jobs run on CPU or remain pending.
+
+### Monitor or stop a run
+
+Open Airflow at `http://localhost:8084`. A sensor shown as **Up for Reschedule** is
+usually waiting normally, not failing. To inspect a run from PowerShell:
+
+```powershell
+docker compose -f orchestration/docker-compose.airflow.yml exec airflow-api-server `
+  airflow tasks states-for-dag-run bot_campaign_model_retraining <RUN_ID>
+```
+
+Mark the DAG run failed from the Airflow UI to stop its orchestration. If the Ray job
+continues, stop the corresponding job separately from the Ray dashboard at
+`http://localhost:8265` or with the Ray Jobs CLI. A queued run can be expected when
+another run is active because `max_active_runs=1`.
 
 Each training output is written under `artifacts/candidates/`. The DAG never silently
 promotes a model or changes the API mount. An approved MLflow version is promoted by a

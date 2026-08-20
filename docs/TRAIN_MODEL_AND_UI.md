@@ -308,7 +308,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
   --validation-data /opt/project/data/processed/dataset_bundle/text/real/validation.jsonl `
   --test-data /opt/project/data/processed/dataset_bundle/text/real/test.jsonl `
   --output /opt/project/artifacts/review_distilbert `
-  --num-samples 20 --epochs 4 --cpus-per-trial 4 --gpus-per-trial 1 `
+  --num-samples 20 --epochs 3 --cpus-per-trial 4 --gpus-per-trial 1 `
   --max-concurrent-trials 1 --minimum-precision 0.90
 ```
 
@@ -326,7 +326,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
   --validation-data /opt/project/data/processed/temporal_bundle/campaign_v3/validation.jsonl `
   --test-data /opt/project/data/processed/temporal_bundle/campaign_v3/test.jsonl `
   --output /opt/project/artifacts/campaign_model `
-  --num-samples 20 --epochs 4 --cpus-per-trial 4 --gpus-per-trial 1 `
+  --num-samples 20 --epochs 3 --cpus-per-trial 4 --gpus-per-trial 1 `
   --max-concurrent-trials 1 --minimum-precision 0.95
 ```
 
@@ -337,7 +337,7 @@ Windows host when native Ray is blocked.
 python training/ray_review_train.py `
   --output artifacts/review_distilbert `
   --num-samples 20 `
-  --epochs 4 `
+  --epochs 3 `
   --cpus-per-trial 4 `
   --gpus-per-trial 1 `
   --minimum-precision 0.90
@@ -354,7 +354,7 @@ python training/ray_train.py `
   --test-data data/processed/temporal_bundle/campaign_v3/test.jsonl `
   --output artifacts/campaign_model `
   --num-samples 20 `
-  --epochs 4 `
+  --epochs 3 `
   --cpus-per-trial 4 `
   --gpus-per-trial 1 `
   --minimum-precision 0.95

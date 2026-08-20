@@ -52,7 +52,7 @@ spec:
                 --output /opt/project/artifacts/review_distilbert \
                 --ray-storage-path /opt/project/artifacts/ray_results \
                 --num-samples "${RAY_NUM_SAMPLES:-20}" \
-                --epochs "${RAY_EPOCHS:-20}" \
+                --epochs "${RAY_EPOCHS:-3}" \
                 --gpus-per-trial "${RAY_GPUS_PER_TRIAL:-0}" \
                 --max-concurrent-trials "${RAY_MAX_CONCURRENT_TRIALS:-1}"
           envFrom:
@@ -62,7 +62,7 @@ spec:
             - name: RAY_NUM_SAMPLES
               value: "20"
             - name: RAY_EPOCHS
-              value: "20"
+              value: "3"
           resources:
             requests:
               cpu: 100m

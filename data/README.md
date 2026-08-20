@@ -273,6 +273,12 @@ Do not train the existing text-only `bot_campaign.cli train` command on campaign
 That command expects the separate labeled-text schema and does not consume temporal
 features.
 
+The `campaign/` files above are the base temporal-bundle outputs. The current Ray,
+Airflow and streaming runbook uses the separately generated, leakage-safe
+`temporal_bundle/campaign_v3/{train,validation,test}.jsonl` splits. Generate them with
+`bot_campaign.cli generate-campaign-splits`; do not substitute the older path in current
+training or replay commands.
+
 ## Reproduce the current temporal build
 
 From the repository root:

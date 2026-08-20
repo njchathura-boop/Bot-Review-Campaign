@@ -7,8 +7,8 @@ spec:
   project: default
   source:
     repoURL: https://github.com/njchathura-boop/Bot-Review-Campaign.git
-    targetRevision: main
-    path: k8s
+    targetRevision: feature/njc
+    path: k8s/overlays/full
   destination:
     server: https://kubernetes.default.svc
     namespace: bot-campaign

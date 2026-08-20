@@ -289,11 +289,11 @@ services:
       - --ray-storage-path
       - /opt/project/artifacts/ray_results
       - --train-data
-      - /opt/project/data/processed/temporal_bundle/campaign_v3/train.jsonl
+      - /opt/project/data/processed/temporal_bundle/campaign/train.jsonl
       - --validation-data
-      - /opt/project/data/processed/temporal_bundle/campaign_v3/validation.jsonl
+      - /opt/project/data/processed/temporal_bundle/campaign/validation.jsonl
       - --test-data
-      - /opt/project/data/processed/temporal_bundle/campaign_v3/test.jsonl
+      - /opt/project/data/processed/temporal_bundle/campaign/test.jsonl
       - --output
       - /opt/project/artifacts/campaign_model
       - --gpus-per-trial

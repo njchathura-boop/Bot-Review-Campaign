@@ -12,6 +12,7 @@ LABEL org.opencontainers.image.title="Detectra API and UI" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     APP_ENV=container \
     WEB_DIR=/app/web \
     REVIEW_TRANSFORMER_PATH=/models/review_distilbert \
@@ -19,24 +20,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 RUN apt-get update \
-    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+RUN python -m pip install --no-cache-dir --no-compile \
+            --index-url https://download.pytorch.org/whl/cpu \
+            "torch>=2.4,<3" && \
+        python -m pip install --no-cache-dir --no-compile ".[nlp,streaming]"
 COPY web ./web
 COPY artifacts/review_distilbert /models/review_distilbert
 COPY artifacts/campaign_model /models/campaign_model
-# Packaging helpers are removed after installation to reduce runtime attack surface.
-RUN python -m pip install \
-      --index-url https://download.pytorch.org/whl/cpu \
-      "torch>=2.4,<3" && \
-    python -m pip install ".[nlp,streaming]" && \
-    python -m pip install --upgrade "setuptools>=82.0.1" && \
-    python -m pip uninstall -y wheel jaraco.context && \
-    test -s /models/review_distilbert/model/model.safetensors && \
+RUN test -s /models/review_distilbert/model/model.safetensors && \
     test -s /models/campaign_model/model_state.pt && \
     mkdir -p artifacts /tmp/detectra && \
     chown -R app:app /app /models /tmp/detectra

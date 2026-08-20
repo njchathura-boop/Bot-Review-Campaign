@@ -369,7 +369,7 @@ ownership, dead-letter handling, processing guarantees, and troubleshooting are 
 
 ```powershell
 docker compose -f orchestration/docker-compose.airflow.yml up airflow-init
-docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-scheduler airflow-api-server
+docker compose -f orchestration/docker-compose.airflow.yml up -d airflow-dag-processor airflow-scheduler airflow-api-server
 ```
 
 Open http://localhost:8080 and trigger `bot_campaign_model_retraining`. Configure
@@ -390,26 +390,30 @@ the long-running Kafka, Spark, scorer, and API services.
 
 ## 11. Kubernetes deployment
 
-The Kubernetes implementation is in `k8s/base.yaml`, and the Argo CD application is in
-`deploy/argocd-application.yaml`. The manifest provides a `bot-campaign` namespace,
-three API replicas, readiness/liveness probes, resource limits, an HPA, and a pod
-disruption budget. It uses an immutable Git-SHA image placeholder:
+The complete build, pull, DVC, CPU/GPU, ETL, training, monitoring, rollback, and
+troubleshooting procedure is [`k8s/README.md`](../k8s/README.md). The layout is:
 
-`ghcr.io/njchathura-boop/bot-review-campaign:REPLACE_WITH_GIT_SHA`
+- `k8s/base`: API/UI, Ray, suspended ETL CronJob, MLflow, Prometheus, Grafana, storage,
+  health probes, security contexts, and services.
+- `k8s/overlays/gpu`: base plus one NVIDIA GPU for the Ray training pod.
+- `k8s/jobs`: explicit full-data DistilBERT training submitter.
+- `scripts/deploy_kubernetes.ps1`: pins all project workloads to one immutable Git SHA.
+- `deploy/argocd-application.yaml`: GitOps reconciliation of the Kustomize root.
 
-For a configured cluster, apply and inspect it with:
+For a published CPU release, deploy and inspect it with:
 
 ```powershell
-kubectl apply -f k8s/base.yaml
-kubectl -n bot-campaign rollout status deployment/bot-campaign-api --timeout=180s
-kubectl -n bot-campaign get pods,svc,hpa
+$sha = "REPLACE_WITH_PUBLISHED_GIT_SHA"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_kubernetes.ps1 `
+  -ImageTag $sha
+kubectl -n bot-campaign get pods,svc,cronjob,pvc
 ```
 
-For Argo CD, apply `deploy/argocd-application.yaml` from the Argo CD control plane. Argo
-CD watches the repository revision and reconciles the `k8s/` directory. The public UI
-cannot mutate Kubernetes. Production must provision the trained model bundle through a
-protected object-store download, model PVC, or equivalent init process before readiness
-can succeed; the image must not silently use an untracked fallback model.
+The API/UI image contains the reviewed model bundles and refuses a release build when
+they are absent. The jobs image restores raw data through `data/raw.dvc`, runs ETL, and
+executes Ray training. Training output is not automatically promoted into serving; it
+must pass review and be packaged into a new immutable release. The public UI cannot
+mutate Kubernetes.
 
 ## 12. CI/CD integration
 
@@ -418,8 +422,9 @@ training, Airflow DAG compilation, Ruff, tests, Docker BuildKit, and Trivy image
 The workflow blocks merging when quality or security gates fail.
 
 CD is `.github/workflows/cd.yml`. A `v*` tag or manual workflow dispatch builds and pushes
-an immutable Git-SHA image to GHCR, scans it, renders `k8s/base.yaml`, deploys the staging
-environment, waits for the API rollout, and calls `/health/ready` from inside the cluster.
+immutable Git-SHA API and jobs images to GHCR, scans both, renders the Kustomize base,
+deploys staging, waits for all long-running workloads, and verifies API readiness and
+metrics from inside the cluster.
 
 Configure a protected GitHub environment named `staging` with a base64-encoded
 `KUBE_CONFIG_DATA` secret. Release with:
@@ -432,7 +437,7 @@ git push origin v1.1.0
 ```
 
 Inspect GitHub **Actions -> cd** for the image digest, rollout, and smoke-test result.
-Rollback Kubernetes with `kubectl -n bot-campaign rollout undo deployment/bot-campaign-api`.
+Rollback Kubernetes with `kubectl -n bot-campaign rollout undo deployment/detectra-api`.
 
 ## 13. Ray out-of-memory recovery
 

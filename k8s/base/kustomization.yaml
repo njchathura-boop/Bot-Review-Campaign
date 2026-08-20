@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bot-campaign
+
+resources:
+  - namespace.yaml
+  - config.yaml
+  - storage.yaml
+  - api.yaml
+  - ray-training.yaml
+  - etl-cronjob.yaml
+  - mlflow.yaml
+  - monitoring/prometheus.yaml
+  - monitoring/grafana.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: detectra
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true
+
+images:
+  - name: detectra-api
+    newName: ghcr.io/njchathura-boop/bot-review-campaign-api
+    newTag: latest
+  - name: detectra-jobs
+    newName: ghcr.io/njchathura-boop/bot-review-campaign-jobs
+    newTag: latest

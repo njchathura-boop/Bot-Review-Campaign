@@ -502,8 +502,9 @@ layout and state styling. Neither contains model logic.
   PostgreSQL metadata database for the checked-in DAG.
 - `monitoring/prometheus.yml` tells Prometheus where to scrape `/metrics`.
 - `monitoring/grafana/provisioning/` provisions the local dashboard/data source.
-- `k8s/base.yaml` contains the namespace, three-replica API deployment, Service, HPA,
-  probes, resource/security settings, and PodDisruptionBudget.
+- `k8s/base/` contains the namespace, API/UI, Ray, ETL CronJob, MLflow, Prometheus,
+  Grafana, services, persistent volumes, probes, and security settings.
+- `k8s/overlays/gpu/` adds an NVIDIA GPU to Ray; `k8s/jobs/` submits full-data training.
 - `deploy/argocd-application.yaml` contains GitOps application state and points Argo CD
   at the repository's `k8s` directory.
 - `.github/workflows/` contains CI/CD validation and image/release automation.

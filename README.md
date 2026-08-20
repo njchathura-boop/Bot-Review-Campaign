@@ -45,6 +45,9 @@ TensorRT export remains a later optimization.
 | Documentation | Setup, architecture, script call graph, operations, report and demonstration sequence | `docs/`, this README |
 
 The report-ready explanation is in [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md).
+The generated Word deliverable is [`reports/Bot_Review_Campaign_Technical_Report.docx`](reports/Bot_Review_Campaign_Technical_Report.docx).
+The diagram-enhanced Word deliverable is [`reports/Bot_Review_Campaign_Technical_Report_with_Diagrams.docx`](reports/Bot_Review_Campaign_Technical_Report_with_Diagrams.docx).
+The presentation-ready architecture figure is [`reports/diagrams/professional_architecture.png`](reports/diagrams/professional_architecture.png), embedded in [`reports/Bot_Review_Campaign_Technical_Report_Professional.docx`](reports/Bot_Review_Campaign_Technical_Report_Professional.docx).
 Airflow setup and its ETL → Ray task sequence are in
 [`orchestration/README.md`](orchestration/README.md).
 The single command-by-command execution guide is
@@ -56,6 +59,9 @@ The runnable Kafka -> Spark -> graph -> hybrid model -> API path is documented i
 The focused data-preparation, Kafka, and Spark reference—including exact inputs,
 outputs, configuration, limitations, and a report screenshot checklist—is
 [`docs/DATA_PREPARATION_KAFKA_SPARK.md`](docs/DATA_PREPARATION_KAFKA_SPARK.md).
+For beginner-friendly local commands, every service URL/API endpoint, script map,
+configuration rationale, and troubleshooting notes, see
+[`data/DATASET_PREP_EXPLAINED.md`](data/DATASET_PREP_EXPLAINED.md).
 
 ## Data architecture
 
@@ -558,6 +564,12 @@ metadata, and manifests stored through DVC--not raw archives or model binaries.
 
 ## Deployment
 
+The supported Kubernetes packaging is documented in
+[`k8s/README.md`](k8s/README.md). It defines two pullable application images and
+separate workloads for API/UI serving, Ray training, DVC ETL, MLflow, Prometheus, and
+Grafana. The API image includes the promoted Git-LFS model bundles; the jobs image
+contains the reproducible ETL and training environment.
+
 Local services:
 
 ```powershell
@@ -591,10 +603,11 @@ Pull requests run [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It ins
 project, runs smoke training, compiles the Airflow DAGs, checks lint, runs tests, builds
 the Docker image, and blocks high/critical Trivy findings.
 
-Pushing a semantic version tag such as `v1.1.0` starts
+Pushing a semantic version tag such as `v1.2.0` starts
 [`.github/workflows/cd.yml`](.github/workflows/cd.yml). It publishes an immutable
-Git-SHA image, scans it, renders `k8s/base.yaml`, deploys to the protected `staging`
-environment, waits for rollout, and calls `/health/ready` inside the cluster.
+Git-SHA-tagged API image and jobs image, scans both, renders the Kustomize base, deploys
+to the protected `staging` environment, waits for the API, Ray, MLflow, Prometheus, and
+Grafana rollouts, and calls `/health/ready` and `/metrics` inside the cluster.
 
 Configure the GitHub `staging` environment with a base64-encoded `KUBE_CONFIG_DATA`
 secret before enabling deployment. Argo CD can watch `k8s/` and reconcile the same
@@ -622,5 +635,6 @@ git commit -m "data: build role-separated temporal review dataset"
 git push origin feature/njc
 ```
 
-Do not commit directly to `main`, raw data, credentials, generated model binaries, or
-local service volumes.
+Do not commit directly to `main`, raw data, credentials, or local service volumes. The
+two promoted model directories are the exception for model binaries: Git stores their
+small Git-LFS pointers while LFS storage holds the actual release artifacts.

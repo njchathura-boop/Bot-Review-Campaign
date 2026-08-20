@@ -1,0 +1,183 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "up{job=\"bot-campaign-api\"}", "refId": "A"}],
+      "title": "API healthy",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "rate(review_scans_total[5m])", "refId": "A"}],
+      "title": "Review scans / second",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 750}, {"color": "red", "value": 1000}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 8, "y": 0},
+      "id": 3,
+      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "api_request_latency_p95_ms", "refId": "A"}],
+      "title": "API p95 latency",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 0},
+      "id": 4,
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "increase(api_errors_total[15m])", "refId": "A"}],
+      "title": "API errors, 15 min",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 0, "y": 5},
+      "id": 5,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "review_mean_risk", "legendFormat": "mean risk", "refId": "A"}, {"expr": "review_mean_confidence", "legendFormat": "mean confidence", "refId": "B"}],
+      "title": "Review model behaviour",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 6, "y": 5},
+      "id": 6,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "campaign_alerts_total", "legendFormat": "active campaigns", "refId": "A"}, {"expr": "campaign_stream_candidates_total", "legendFormat": "stream candidates", "refId": "B"}, {"expr": "review_needs_human_review_total", "legendFormat": "reviews needing human review", "refId": "C"}],
+      "title": "Campaign and moderator workload",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 5},
+      "id": 7,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "campaign_moderation_confirmed_total", "legendFormat": "confirmed", "refId": "A"}, {"expr": "campaign_moderation_dismissed_total", "legendFormat": "dismissed", "refId": "B"}, {"expr": "campaign_moderation_restored_total", "legendFormat": "restored", "refId": "C"}],
+      "title": "Moderator decisions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 5},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "review_language_reviews_total", "legendFormat": "{{language}}", "refId": "A"}, {"expr": "review_invalid_requests_total", "legendFormat": "invalid requests", "refId": "B"}],
+      "title": "Data quality and language mix",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 12},
+      "id": 9,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "review_scans_total", "refId": "A"}],
+      "title": "Total reviews scanned",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 12},
+      "id": 10,
+      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "review_needs_human_review_total", "refId": "A"}],
+      "title": "Reviews awaiting human review",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 12},
+      "id": 11,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "api_request_latency_p50_ms", "legendFormat": "p50", "refId": "A"}, {"expr": "api_request_latency_p95_ms", "legendFormat": "p95", "refId": "B"}, {"expr": "api_request_latency_p99_ms", "legendFormat": "p99", "refId": "C"}],
+      "title": "API latency: p50 / p95 / p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 16, "y": 12},
+      "id": 12,
+      "options": {"colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "increase(campaign_stream_consumer_errors_total[15m])", "refId": "A"}],
+      "title": "Kafka stream errors, 15 min",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 17},
+      "id": 13,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "rate(campaign_stream_scores_total[5m])", "legendFormat": "scores consumed / sec", "refId": "A"}, {"expr": "rate(campaign_stream_candidates_total[5m])", "legendFormat": "candidates / sec", "refId": "B"}],
+      "title": "Campaign Kafka stream activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 25},
+      "id": 14,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "api_disk_free_bytes", "refId": "A"}],
+      "title": "API free disk",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 17},
+      "id": 15,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single"}},
+      "targets": [{"expr": "ray_node_cpu_utilization", "legendFormat": "CPU {{instance}}", "refId": "A"}],
+      "title": "Ray node CPU utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 1}, {"color": "green", "value": 2}]}}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 12},
+      "id": 16,
+      "options": {"colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "sum(up{job=\"ray\"})", "refId": "A"}],
+      "title": "Ray services healthy (of 2)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 25},
+      "id": 17,
+      "options": {"colorMode": "value", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{"expr": "api_uptime_seconds", "refId": "A"}],
+      "title": "API uptime",
+      "type": "stat"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": ["detectra", "operations"],
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Detectra / API Operations",
+  "uid": "detectra-api-operations",
+  "version": 3
+}

@@ -213,11 +213,11 @@ async function loadMonitoring() {
   const data = await fetchJson("/v1/monitoring");
   $("#hero-scans").textContent = data.reviews_processed; $("#hero-campaigns").textContent = data.campaign_alerts; $("#hero-latency").textContent = formatLatency(data.latency_ms.p95);
   $("#monitor-updated").textContent = `Updated ${new Date(data.updated_at).toLocaleTimeString()}`;
-  const metrics = [["Throughput", data.reviews_per_second, "/ sec"], ["API errors", data.api_error_rate, "%"], ["Kafka lag", data.kafka_consumer_lag, "events"], ["Campaigns", data.campaign_alerts, "alerts"], ["Soft limits", data.soft_limited_campaigns, "active"], ["Mean risk", Math.round(data.mean_review_risk * 100), "%"]];
+  const metrics = [["Throughput", data.reviews_per_second, "/ sec"], ["API errors", data.api_error_rate, "%"], ["Campaigns", data.campaign_alerts, "alerts"], ["Soft limits", data.soft_limited_campaigns, "active"], ["Mean risk", Math.round(data.mean_review_risk * 100), "%"]];
   const root = $("#metric-grid"); root.replaceChildren();
   metrics.forEach(([name, value, suffix]) => { const card = element("article", "metric-card"); card.append(element("strong", "", `${value} ${suffix}`), element("span", "", name)); root.append(card); });
   renderBars($("#latency-bars"), [["p50", data.latency_ms.p50, 150, " ms"], ["p95", data.latency_ms.p95, 150, " ms"], ["p99", data.latency_ms.p99, 150, " ms"]]);
-  renderBars($("#drift-bars"), [["Feature", Math.round(data.feature_drift * 100), 100, "%"], ["Embedding", Math.round(data.embedding_drift * 100), 100, "%"]]);
+  const drift = $("#drift-bars"); drift.replaceChildren(element("span", "", "Live drift measurement is not configured yet."));
 }
 
 async function loadLineage() {

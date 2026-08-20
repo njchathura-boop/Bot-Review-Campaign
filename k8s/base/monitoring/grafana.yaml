@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: detectra-grafana-provisioning
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://detectra-prometheus:9090
+        isDefault: true
+        editable: false
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: Detectra
+        folder: Detectra
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: detectra-grafana-dashboard
+data:
+  detectra-overview.json: |
+    {
+      "annotations": {"list": []},
+      "editable": false,
+      "graphTooltip": 1,
+      "panels": [
+        {"type":"stat","title":"Reviews scanned","id":1,"gridPos":{"h":7,"w":6,"x":0,"y":0},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"expr":"review_scans_total","refId":"A"}]},
+        {"type":"stat","title":"Campaign alerts","id":2,"gridPos":{"h":7,"w":6,"x":6,"y":0},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"expr":"campaign_alerts_total","refId":"A"}]},
+        {"type":"stat","title":"API p95 latency (ms)","id":3,"gridPos":{"h":7,"w":6,"x":12,"y":0},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"expr":"api_request_latency_p95_ms","refId":"A"}]},
+        {"type":"stat","title":"API error rate","id":4,"gridPos":{"h":7,"w":6,"x":18,"y":0},"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"unit":"percentunit"}},"targets":[{"expr":"api_error_rate","refId":"A"}]},
+        {"type":"timeseries","title":"Review throughput","id":5,"gridPos":{"h":8,"w":12,"x":0,"y":7},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"expr":"review_scans_per_second","legendFormat":"reviews/s","refId":"A"}]},
+        {"type":"timeseries","title":"Ray CPU by component","id":6,"gridPos":{"h":8,"w":12,"x":12,"y":7},"datasource":{"type":"prometheus","uid":"prometheus"},"targets":[{"expr":"sum by (Component) (ray_component_cpu_percentage)","legendFormat":"{{Component}}","refId":"A"}]}
+      ],
+      "refresh": "10s",
+      "schemaVersion": 40,
+      "tags": ["detectra", "mlops", "ray"],
+      "templating": {"list": []},
+      "time": {"from":"now-1h","to":"now"},
+      "title": "Detectra Kubernetes Overview",
+      "uid": "detectra-k8s-overview",
+      "version": 1
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: detectra-grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-grafana
+        app.kubernetes.io/component: monitoring-ui
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: initialize-storage
+          image: busybox:1.36.1
+          command: [sh, -c, "chown -R 472:472 /var/lib/grafana"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.1.0
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Viewer
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-grafana-admin
+                  key: admin-user
+                  optional: true
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-grafana-admin
+                  key: admin-password
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasource
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: providers
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: detectra-grafana
+        - name: datasource
+          configMap:
+            name: detectra-grafana-provisioning
+            items:
+              - key: datasource.yaml
+                path: datasource.yaml
+        - name: providers
+          configMap:
+            name: detectra-grafana-provisioning
+            items:
+              - key: dashboards.yaml
+                path: dashboards.yaml
+        - name: dashboards
+          configMap:
+            name: detectra-grafana-dashboard
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: detectra-grafana
+spec:
+  selector:
+    app.kubernetes.io/name: detectra-grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

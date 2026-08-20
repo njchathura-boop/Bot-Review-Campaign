@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: detectra-config
+data:
+  RAY_GPUS_PER_TRIAL: "1"

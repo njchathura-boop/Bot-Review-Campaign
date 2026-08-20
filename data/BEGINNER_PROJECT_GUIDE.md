@@ -1,4 +1,4 @@
-# Detectra: Plain-English Data, AI, and Streaming Guide
+# Detectra: Plain-English Project Guide
 
 This guide explains the project as simply as possible: where the data comes from, what
 we create, how the AI learns, and how Kafka/Spark process many reviews.
@@ -124,6 +124,100 @@ campaign and then see the other half in its final exam.
 | `orchestration/dags/bot_campaign_streaming_smoke.py` | Airflow's small end-to-end streaming test. |
 | `scripts/start_detectra.ps1` | The safe Windows launcher for the local stack; optional switches add GPU support, log search, and image rebuilding. |
 | `monitoring/filebeat.yml` | Chooses which Docker logs Filebeat sends to Elasticsearch for Kibana searches. |
+
+### Detailed script-to-script flow
+
+This is the complete “who calls whom” map. A solid arrow means one Python program or
+command directly starts the next one. A Kafka arrow means the programs are separate:
+one writes a message and another reads it later. The words on the arrows explain why
+the hand-off exists.
+
+```mermaid
+flowchart TD
+    subgraph DATA["1. Prepare data"]
+        DOWNLOAD["scripts/download_amazon_categories.ps1\nGet and verify source JSONL"]
+        CLI["src/bot_campaign/cli.py\nBuild repeatable commands"]
+        BUNDLE["src/bot_campaign/dataset_bundle.py\nCoordinate outputs"]
+        AMAZON["src/bot_campaign/amazon.py\nMap downloaded fields"]
+        DATAUTIL["src/bot_campaign/data.py\nValidate and normalize rows"]
+        TEMPORAL["src/bot_campaign/temporal.py\nCreate past-only behavior features"]
+        SPLITS["campaign_v3 train/validation/test\nSafe learning files"]
+        TEXTSPLITS["dataset_bundle/text/...\nOne-review train/validation/test"]
+        DOWNLOAD -->|"need real source data"| CLI
+        CLI -->|"start the preparation pipeline"| BUNDLE
+        BUNDLE -->|"read and map source records"| AMAZON
+        AMAZON -->|"clean and standardize records"| DATAUTIL
+        BUNDLE -->|"calculate time and behavior clues"| TEMPORAL
+        DATAUTIL --> TEMPORAL
+        TEMPORAL -->|"make leakage-safe campaign examples"| SPLITS
+        BUNDLE -->|"prepare labelled text files"| TEXTSPLITS
+    end
+
+    subgraph TRAIN["2. Schedule and train"]
+        AIRFLOW["orchestration/dags/bot_campaign_training.py\nRun stages in order"]
+        RAYAPI["Ray Jobs API\nRun remote jobs"]
+        REVIEW["training/ray_review_train.py\nTrain one-review DistilBERT"]
+        CAMPAIGN["training/ray_train.py\nTrain campaign hybrid model"]
+        RAYTUNE["Ray Tune\n12 trials, max 20 epochs, ASHA"]
+        FEATURES["campaign_features.py\nBuild group features"]
+        HYBRID["hybrid_model.py\nDistilBERT + MLP"]
+        MLFLOW["MLflow\nSave metrics and versions"]
+        REVIEWBUNDLE["artifacts/review_distilbert"]
+        CAMPAIGNBUNDLE["artifacts/campaign_model"]
+        AIRFLOW -->|"start ETL, then training"| RAYAPI
+        RAYAPI -->|"submit review job"| REVIEW
+        RAYAPI -->|"submit campaign job"| CAMPAIGN
+        REVIEW -->|"try hyperparameters"| RAYTUNE
+        CAMPAIGN -->|"try hyperparameters"| RAYTUNE
+        TEXTSPLITS -->|"supply review examples"| REVIEW
+        SPLITS -->|"supply campaign examples"| CAMPAIGN
+        CAMPAIGN -->|"prepare numeric inputs"| FEATURES
+        CAMPAIGN -->|"train final neural scorer"| HYBRID
+        REVIEW -->|"record trial results"| MLFLOW
+        CAMPAIGN -->|"record trial results"| MLFLOW
+        REVIEW --> REVIEWBUNDLE
+        CAMPAIGN --> CAMPAIGNBUNDLE
+    end
+
+    subgraph LIVE["3. Process reviews continuously"]
+        PRODUCER["streaming/producer.py\nReplay or publish reviews"]
+        RAW["Kafka reviews.raw.v1"]
+        SPARK["spark/review_stream.py\nCreate event-time windows"]
+        WINDOWS["Kafka reviews.analysis-windows.v1"]
+        SCORER["streaming/campaign_scorer.py\nGroup and score reviews"]
+        INFERENCE["campaign_inference.py\nCoordinate graph + model"]
+        GRAPH["campaign_graph.py\nFind connected components"]
+        SCORES["Kafka reviews.campaign-scores.v1"]
+        PRODUCER -->|"put events in the queue"| RAW
+        RAW -->|"let Spark process asynchronously"| SPARK
+        SPARK -->|"send prepared windows"| WINDOWS
+        WINDOWS -->|"give scorer a bounded group"| SCORER
+        SCORER -->|"ask for campaign evidence"| INFERENCE
+        INFERENCE -->|"find related reviews"| GRAPH
+        INFERENCE -->|"calculate risk"| HYBRID
+        SCORER -->|"publish score and evidence"| SCORES
+        CAMPAIGNBUNDLE -->|"load trained weights"| SCORER
+    end
+
+    subgraph APP["4. Show and monitor results"]
+        API["src/bot_campaign/api.py\nFastAPI endpoints and UI"]
+        RUNTIME["streaming_runtime.py\nConsume final scores for UI"]
+        UI["web/\nReview and campaign screens"]
+        METRICS["Prometheus/Grafana\nHealth and performance"]
+        LOGS["Filebeat/Elasticsearch/Kibana\nSearch container logs"]
+        SCORES -->|"deliver campaign evidence"| RUNTIME
+        RUNTIME -->|"store evidence for API"| API
+        REVIEWBUNDLE -->|"score individual review"| API
+        API -->|"render result"| UI
+        API -->|"publish metrics"| METRICS
+        API -->|"write searchable logs"| LOGS
+    end
+```
+
+The important idea is that Airflow starts work in order, Ray performs the expensive
+training, Kafka carries live messages, Spark makes time windows, and the campaign scorer
+does the final group-level decision. The browser never calls Spark or Ray directly; it
+talks to FastAPI and receives the evidence that the backend has already processed.
 
 ## 7. The two AI models
 
@@ -857,7 +951,7 @@ history and shows the charts.
 
 ```powershell
 docker compose exec -T campaign-scorer python streaming/producer.py `
-  --input /opt/project/data/processed/temporal_bundle/campaign/test.jsonl `
+  --input /opt/project/data/processed/temporal_bundle/campaign_v3/test.jsonl `
   --bootstrap-servers kafka:29092 `
   --rate 10
 ```
@@ -1529,7 +1623,7 @@ docker compose exec ray-head ray status --address=127.0.0.1:6379
 
 # Did the replay producer actually send events?
 docker compose exec -T campaign-scorer python streaming/producer.py `
-  --input /opt/project/data/processed/temporal_bundle/campaign/test.jsonl `
+  --input /opt/project/data/processed/temporal_bundle/campaign_v3/test.jsonl `
   --bootstrap-servers kafka:29092 --rate 10
 
 # Did Filebeat write searchable documents?  Then refresh Kibana Discover.

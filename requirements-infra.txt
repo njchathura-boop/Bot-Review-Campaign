@@ -1,7 +1,0 @@
-# Install inside Python 3.11/3.12 environments. Ray/PySpark support may lag Python 3.14.
-confluent-kafka>=2.6,<4
-datasets>=3,<5
-mlflow>=3,<4
-ray[default]>=2.40,<3
-pyspark>=4.0,<4.2
-

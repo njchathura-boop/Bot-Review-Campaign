@@ -105,7 +105,7 @@ docker compose -f orchestration/docker-compose.airflow.yml up -d `
   airflow-scheduler airflow-api-server
 ```
 
-Open `http://localhost:8080`, sign in with the local development credentials
+Open `http://localhost:8084`, sign in with the local development credentials
 `admin`/`admin`, find `bot_campaign_streaming_smoke`, unpause it, and select
 **Trigger DAG**.
 

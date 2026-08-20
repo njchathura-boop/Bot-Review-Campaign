@@ -292,7 +292,7 @@ def main() -> None:
     )
     parser.add_argument("--num-samples", type=int, default=12)
     # Maximum epochs: ASHA may stop weak trials early before this limit.
-    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--cpus-per-trial", type=float, default=4)
     parser.add_argument("--gpus-per-trial", type=float, default=1)
     parser.add_argument(

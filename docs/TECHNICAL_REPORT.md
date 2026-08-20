@@ -1,5 +1,18 @@
 # Bot Review Campaign Detection — Technical Report
 
+## Submission and team details
+
+| Field | Value |
+|---|---|
+| Course | DA5402W — MLOps |
+| Team ID | **TODO: add team ID** |
+| Team members and roll numbers | **TODO: add every member** |
+| Evaluation branch | `main` |
+
+| Team member | Roll number | Contribution |
+|---|---|---|
+| **TODO** | **TODO** | **TODO** |
+
 ## 1. Problem statement
 
 Ecommerce platforms receive large numbers of reviews and can be targeted by
@@ -365,7 +378,7 @@ experiments and model versions.
 The reproducible order is: obtain pinned source data, run the dataset command with the
 recorded seed, validate manifests and split guards, run baseline and Ray training, inspect
 MLflow, publish the bundle, start the API, run smoke/load tests, and observe before any
-promotion. Commands are consolidated in `docs/END_TO_END_RUNBOOK.md`.
+promotion. Commands are consolidated in the root `README.md`.
 
 ## 20. Challenges and lessons learned
 

@@ -33,3 +33,4 @@ spark-warehouse/
 *.log
 .runtime/
 orchestration/airflow_simple_auth_passwords.json
+k8s/secrets/*.local.yaml

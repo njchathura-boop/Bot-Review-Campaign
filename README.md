@@ -1,705 +1,791 @@
-# Bot Review Campaign Detection
+# Detectra — Bot Review Campaign Detection
 
-An ecommerce trust demo that keeps two decisions separate:
+Detectra is an ecommerce trust system that keeps two decisions separate:
 
-- **Review risk** classifies review text using observed product-review labels.
-- **Campaign risk** looks for coordinated user, product, rating, text, and time patterns.
+- **Review risk** estimates whether one review should be inspected by a moderator.
+- **Campaign risk** finds groups of reviews that may be coordinated across users,
+  products, ratings, language and time.
 
-Neither score proves that a user is a bot. Individual review risk creates moderator
-evidence only. Campaign restrictions require separate evidence and human confirmation.
+Neither score proves that a person or account is a bot. The system returns evidence for
+human review; it does not automatically delete reviews or ban users.
+
+## Submission information
+
+Complete the missing team values before final submission.
+
+| Field | Value |
+|---|---|
+| Course | DA5402W — MLOps |
+| Repository name | `DA5402W_project_<team-id>_<roll-number>` |
+| Evaluation branch | `main` |
+| Team ID | **TODO: add team ID** |
+| Team members and roll numbers | **TODO: add every member** |
+| GitHub evaluator | `mlopslabsubmission-2026` |
+| Final report | `reports/Bot_Review_Campaign_Technical_Report_Professional.pdf` |
+
+| Team member | Roll number | Contribution |
+|---|---|---|
+| **TODO** | **TODO** | **TODO** |
+
+### Start here
+
+- For the complete operational runbook, continue through this README.
+- For the dataset preparation story explained from the beginning in simple language,
+  read [`data/BEGINNER_PROJECT_GUIDE.md`](data/BEGINNER_PROJECT_GUIDE.md). This is the
+  canonical replacement for the former `DATASET_PREP_EXPLAINED.md`; there is no separate
+  `DATASET_PREP_GUIDE.md` because duplicate guides become inconsistent.
+- For Kubernetes-only commands and resource details, read
+  [`k8s/README.md`](k8s/README.md).
 
 ## What is implemented
 
-- Role-separated dataset bundle for text labels, observed behavior, and campaigns.
-- Local and Kaggle ecommerce text-label normalization.
-- Amazon Reviews 2023 temporal profiling with past-only features.
-- Actual product launch times when a catalogue is supplied; otherwise a clearly marked
-  earliest-review proxy.
-- Amazon-profile-driven campaign and legitimate-burst scenarios.
-- DistilBERT individual-review risk, a hybrid DistilBERT campaign model, and a retained
-  TF-IDF comparison/fallback baseline.
-- Ray Tune search, MLflow experiment lineage/registry packaging, and held-out test gate.
-- Kafka replay, Spark event-time candidate windows, and an idempotent streaming scorer.
-- Explainable campaign detection, FastAPI endpoints, review-scanning UI, metrics, Docker,
-  Kubernetes, DVC, Ray, Spark, MLflow, Prometheus, and Grafana scaffolding.
+- Leakage-safe text and temporal dataset preparation with source provenance.
+- TF-IDF/logistic-regression baseline and DistilBERT individual-review model.
+- Hybrid campaign model combining DistilBERT embeddings and 15 behavioral features.
+- Ray Tune hyperparameter search with ASHA early stopping and GPU scheduling.
+- MLflow experiment tracking, artifacts and registered model versions.
+- Airflow ETL → review training → campaign training orchestration.
+- Kafka event transport and Spark Structured Streaming event-time windows.
+- Graph-based related-review discovery and idempotent campaign scoring.
+- FastAPI backend and responsive HTML/CSS/JavaScript moderation UI.
+- DVC dataset versioning and Git LFS model artifact storage.
+- Prometheus/Grafana metrics and Filebeat/Elasticsearch/Kibana log search.
+- Docker Compose, Kubernetes/Kustomize and GitHub Actions CI/CD.
 
-The UI's **Scan review** path prefers `review-risk-distilbert-v1`; the small TF-IDF
-model remains only a baseline and fallback. **Replay campaign** uses a separate hybrid
-model that fuses DistilBERT embeddings with temporal and behavioral group features.
-TensorRT export remains a later optimization.
+## Architecture
 
-## Compulsory project requirements
-
-| Requirement | Implementation in this repository | Verification |
-|---|---|---|
-| Version control | Git history, protected-branch workflow, Conventional Commits, GitHub Actions | `git log --oneline`, `.github/workflows/ci.yml` |
-| Automated orchestration | Airflow 3 DAG submits temporal ETL and sequential Ray training jobs | `orchestration/dags/bot_campaign_training.py` |
-| Data engineering | Kafka transports replayable events; Spark performs event-time windows and watermarks | `streaming/producer.py`, `spark/review_stream.py` |
-| Data processing | Canonicalization, missing-value defaults, duplicate rejection, feature contracts, group-safe splits, class weights | `src/bot_campaign/data.py`, `temporal.py`, `campaign_features.py` |
-| Two ML models | TF-IDF/style Logistic Regression baseline and DistilBERT review model; hybrid DistilBERT campaign model | `src/bot_campaign/model.py`, `training/ray_review_train.py`, `training/ray_train.py` |
-| Evaluation and tracking | PR-AUC/ROC-AUC/precision/recall/F1/Brier/log loss; Ray trials and selected runs in MLflow | MLflow at `http://localhost:5001` |
-| Dataset/model versioning | DVC manifests/hashes, MLflow registered models, Git SHA and immutable image tags | `dvc.yaml`, model lineage endpoints |
-| Deployment | FastAPI API/UI, Docker Compose, Kubernetes and Argo CD manifests | `Dockerfile`, `docker-compose.yml`, `k8s/`, `deploy/` |
-| Monitoring | Prometheus metrics, Grafana dashboards, structured logs, drift/latency/lag alert definitions | `monitoring/`, `/metrics` |
-| CI/CD | GitHub Actions quality gates, immutable GHCR images, Trivy scan, Kubernetes staging rollout | `.github/workflows/ci.yml`, `.github/workflows/cd.yml` |
-| Documentation | Setup, architecture, script call graph, operations, report and demonstration sequence | `docs/`, this README |
-
-The report-ready explanation is in [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md).
-The generated Word deliverable is [`reports/Bot_Review_Campaign_Technical_Report.docx`](reports/Bot_Review_Campaign_Technical_Report.docx).
-The diagram-enhanced Word deliverable is [`reports/Bot_Review_Campaign_Technical_Report_with_Diagrams.docx`](reports/Bot_Review_Campaign_Technical_Report_with_Diagrams.docx).
-The presentation-ready architecture figure is [`reports/diagrams/professional_architecture.png`](reports/diagrams/professional_architecture.png), embedded in [`reports/Bot_Review_Campaign_Technical_Report_Professional.docx`](reports/Bot_Review_Campaign_Technical_Report_Professional.docx).
-Airflow setup and its ETL → Ray task sequence are in
-[`orchestration/README.md`](orchestration/README.md).
-The single command-by-command execution guide is
-[`docs/END_TO_END_RUNBOOK.md`](docs/END_TO_END_RUNBOOK.md).
-The complete technology, script-call, trigger-command, streaming, deployment, and
-troubleshooting guide is [`docs/COMPLETE_PROJECT_GUIDE.md`](docs/COMPLETE_PROJECT_GUIDE.md).
-The runnable Kafka -> Spark -> graph -> hybrid model -> API path is documented in
-[`docs/LIVE_STREAMING_PIPELINE.md`](docs/LIVE_STREAMING_PIPELINE.md).
-The focused data-preparation, Kafka, and Spark reference—including exact inputs,
-outputs, configuration, limitations, and a report screenshot checklist—is
-[`docs/DATA_PREPARATION_KAFKA_SPARK.md`](docs/DATA_PREPARATION_KAFKA_SPARK.md).
-For beginner-friendly local commands, every service URL/API endpoint, script map,
-configuration rationale, and troubleshooting notes, see
-[`data/DATASET_PREP_EXPLAINED.md`](data/DATASET_PREP_EXPLAINED.md).
-
-## Data architecture
-
-Text datasets and behavioral datasets deliberately have different schemas. A labelled
-text row is not forced to pretend that it has a user, product, timestamp, or launch date.
+![Detectra architecture](reports/diagrams/professional_architecture.png)
 
 ```mermaid
 flowchart LR
-    LOCAL["Local product text + labels"] --> TEXT["Text label normalizer"]
-    KAGGLE["Kaggle OR/CG product reviews"] --> TEXT
-    TEXT --> SPLIT["Real train / validation / test"]
-    SPLIT --> AUGMENT["Optional train-only text augmentation"]
-    SPLIT --> MIX["Capped text training mixture"]
-    AUGMENT --> MIX --> REVIEWMODEL["Review DistilBERT"]
+    USER[Browser] --> API[FastAPI]
+    API --> REVIEW[Review DistilBERT]
+    API --> RAW[Kafka reviews.raw.v1]
+    RAW --> SPARK[Spark event-time windows]
+    SPARK --> WINDOWS[Kafka reviews.analysis-windows.v1]
+    WINDOWS --> SCORER[Campaign scorer]
+    SCORER --> GRAPH[Related-review graph]
+    GRAPH --> HYBRID[DistilBERT + numeric MLP]
+    HYBRID --> SCORES[Kafka reviews.campaign-scores.v1]
+    SCORES --> API
 
-    AMAZON["Observed Amazon review events"] --> TEMPORAL["Past-only temporal features"]
-    CATALOG["Platform product catalogue"] --> LAUNCH["Actual launch time"]
-    AMAZON --> PROXY["Earliest review launch proxy"]
-    LAUNCH --> TEMPORAL
-    PROXY --> TEMPORAL
-    TEMPORAL --> PROFILE["Category behavior profile"]
-    PROFILE --> SCENARIOS["Campaign + legitimate-burst scenarios"]
-    TEMPORAL --> CAMPAIGNFEATURES["Campaign-level feature design"]
-    SCENARIOS --> CAMPAIGNFEATURES
-    CAMPAIGNFEATURES --> CAMPAIGNMODEL["DistilBERT + numeric fusion"]
-    CAMPAIGNMODEL --> RAY["Ray Tune"] --> MLFLOW["MLflow registry"]
+    AIRFLOW[Airflow] --> RAY[Ray Tune]
+    RAY --> MLFLOW[MLflow]
+    MLFLOW --> REVIEW
+    MLFLOW --> HYBRID
 
-    REVIEWMODEL --> API["FastAPI"]
-    CAMPAIGNMODEL --> API
-    API <--> UI["Review-scanning UI"]
-    API --> METRICS["Prometheus / Grafana"]
+    API --> PROM[Prometheus]
+    RAY --> PROM
+    PROM --> GRAFANA[Grafana]
+    LOGS[Docker logs] --> FILEBEAT[Filebeat]
+    FILEBEAT --> ES[Elasticsearch]
+    ES --> KIBANA[Kibana]
 ```
 
-## Dataset choices
+Kafka topics are asynchronous boundaries: the producer does not directly call Spark,
+and Spark does not directly call the scorer. Airflow schedules work, Ray performs
+training, and MLflow records experiments. The browser talks only to FastAPI.
 
-| Source | Role | Label policy |
+## Technology stack
+
+| Area | Technology | Responsibility |
 |---|---|---|
-| Local `product_reviews.jsonl` | Review-text classification | Preserve `is_deceptive` |
-| Mexwell Kaggle product reviews | Review-text classification | `OR=0`, `CG=1` proxy |
-| Amazon Reviews 2023 | Temporal and graph baseline | Never invent fake labels |
-| Learned campaign scenarios | Controlled campaign evaluation | Explicit synthetic membership |
-| Platform product catalogue | Actual product launch time | Observed platform value |
+| Frontend | HTML, CSS, JavaScript | Review scanner, campaign evidence and operations views |
+| Backend | Python, FastAPI, Uvicorn | Validation, inference, APIs, static UI and metrics |
+| Models | PyTorch, Transformers, DistilBERT, scikit-learn | Review and campaign models plus baseline |
+| Training | Ray Tune, ASHA | Trials, early stopping and GPU/CPU scheduling |
+| Tracking | MLflow | Parameters, metrics, artifacts and model versions |
+| Orchestration | Airflow 3, PostgreSQL | Ordered DAGs and durable task metadata |
+| Streaming | Kafka, Spark Structured Streaming | Events, watermarks, windows and routing |
+| Data versioning | DVC | Dataset and reproducible-pipeline versions |
+| Artifact versioning | Git LFS | Promoted model binaries |
+| Monitoring | Prometheus, Grafana | Metrics and dashboards |
+| Logging | Filebeat, Elasticsearch, Kibana | Log shipping, indexing and KQL search |
+| Packaging | Docker, Docker Compose | Reproducible local services |
+| Deployment | Kubernetes, Kustomize | Production-style workloads and overlays |
+| CI/CD | GitHub Actions, Trivy, GHCR | Tests, scans, images and staging rollout |
 
-Controlled scenarios cover organic traffic, legitimate launch bursts, coordinated
-positive/negative attacks, paraphrased campaigns, unusual-hour bursts, slow-drip
-activity, and campaigns spanning several product IDs.
+## Repository layout
 
-Not included by default:
+| Path | Responsibility |
+|---|---|
+| `src/bot_campaign/` | Schemas, data logic, models, inference, API and routes |
+| `web/` | Static frontend served by FastAPI |
+| `training/` | Ray Tune review and campaign training entrypoints |
+| `streaming/` | Kafka producer and campaign-scoring consumer |
+| `spark/` | Structured Streaming job |
+| `orchestration/` | Airflow DAGs and local Airflow Compose stack |
+| `monitoring/` | Prometheus, Grafana, Filebeat and alerts |
+| `k8s/` | Kubernetes base, jobs and overlays |
+| `docker/` | Ray/training and Airflow images |
+| `scripts/` | PowerShell launch, data, report and deployment helpers |
+| `data/` | DVC metadata, sources and prepared bundles |
+| `artifacts/` | Promoted models, candidates and Ray results |
+| `tests/` | Unit, API, pipeline and browser tests |
+| `.github/workflows/` | CI and CD workflows |
+| `docs/` and `reports/` | Technical references and submission deliverables |
 
-- Amazon 2018, because Amazon 2023 already covers the behavioral role.
-- Yelp, because business-review domain shift and filter-proxy labels are unnecessary for
-  the initial ecommerce baseline.
-- Third-party synthetic 100K data, because the local generator is versioned and learned
-  from the selected Amazon sample.
-- Direct-evidence Amazon research data, because no verified public download was found.
+## Prerequisites and installation
 
-Kaggle `CG` means computer-generated; it does not establish bot accounts or campaign
-membership.
-
-## Generated temporal dataset
-
-For the complete source-to-output explanation, schema definitions, quality assessment,
-and inspection commands, see [`data/README.md`](data/README.md).
-
-The completed full temporal run writes:
-
-```text
-data/processed/temporal_bundle/
-|-- manifest.json
-|-- behavior/
-|   |-- events.jsonl
-|   |-- products.jsonl
-|   |-- profile.json
-|   `-- manifest.json
-`-- campaign/
-    |-- train.jsonl
-    |-- validation.jsonl
-    |-- test.jsonl
-    `-- manifest.json
-```
-
-The independent review-text files remain under `data/processed/dataset_bundle/text/`
-when that optional pipeline is built. They are not inputs to `temporal_bundle`.
-
-### Text label schema
-
-```text
-review_id, text, label, category?, rating?, source, group_id,
-label_provenance, field_provenance, synthetic, split
-```
-
-It intentionally has no `user_id`, `product_id`, `timestamp`, verification, helpful
-votes, or launch time unless the source actually supplied those fields for another role.
-
-### Timestamp-aware campaign schema
-
-The separate campaign train, validation, and test files contain review text, UTC
-timestamp, user/product IDs, launch provenance, rating, verification, past-only temporal
-features, `scenario_group_id`, and the `expected_campaign` target. Complete scenario
-groups remain in one split to prevent campaign leakage. Generated timestamps are bounded
-to the product/category observation window, preventing future dates outside the Amazon
-source period.
-
-### Behavioral event schema
-
-Observed Amazon fields:
-
-```text
-review_id, user_id, product_id, text, rating, timestamp,
-verified_purchase, helpful_votes, category, source,
-source_revision, metadata_provenance
-```
-
-Derived past-only fields:
-
-```text
-launch_time
-launch_time_provenance
-hours_since_launch
-launch_phase
-is_pre_launch_review
-review_hour_utc
-review_weekday_utc
-is_weekend_utc
-minutes_since_product_review
-minutes_since_user_review
-product_reviews_previous_1h
-user_reviews_previous_24h
-```
-
-Amazon has no reviewer timezone, so hour-of-day is UTC. Production should derive local
-hour upstream from an approved coarse timezone when available.
-
-### Product launch policy
-
-If the platform catalogue supplies a launch time:
-
-```text
-launch_time_provenance = catalog_actual
-```
-
-Otherwise:
-
-```text
-launch_time = earliest timestamp observed for that product
-launch_time_provenance = earliest_observed_review_proxy
-```
-
-The proxy is never described as an actual launch date.
-
-## Install
-
-Python 3.11 is recommended.
+- Git and Git LFS.
+- Python 3.11 or 3.12.
+- Docker Desktop using the Linux/WSL2 engine.
+- At least 12–16 GB RAM assigned to Docker for full DistilBERT training.
+- NVIDIA drivers and Docker GPU support for GPU mode.
+- `kubectl` and Kubernetes 1.27+ only for Kubernetes deployment.
 
 ```powershell
-py -3.11 -m venv .venv
+Set-Location "C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project"
+git lfs install
+git lfs pull
+python --version
+docker version
+docker compose version
+
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,mlops,streaming,nlp,distributed,ui]"
 ```
 
-Install optional Kafka support only when running the Kafka producer:
+Restore data from the configured team DVC remote:
 
 ```powershell
-python -m pip install -e ".[streaming]"
+python -m dvc remote list
+python -m dvc pull
+python -m dvc status
 ```
 
-Install campaign training dependencies for DistilBERT, Ray, and MLflow:
+The checked-in local DVC remote is machine-specific. A new machine must configure the
+team's shared remote before `dvc pull`. Never commit storage credentials.
+
+## Quick start
+
+CPU stack:
 
 ```powershell
-python -m pip install -e ".[campaign-training,streaming]"
+.\scripts\start_detectra.ps1 -Observability -Build
+.\scripts\start_airflow.ps1
 ```
 
-## Prepare raw inputs
-
-The labeled inputs below are needed only for the independent review-text model:
-
-```text
-data/raw/product_reviews.jsonl
-```
-
-Download the CC BY 4.0 Kaggle corpus:
+NVIDIA GPU stack:
 
 ```powershell
-python -m pip install kaggle
-kaggle datasets download -d mexwell/fake-reviews-dataset `
-  -p data/raw/kaggle_fake_reviews `
-  --unzip
-```
-
-The temporal build uses a restartable downloader for all 33 Amazon categories. It reads
-the pinned raw JSONL directly and stops after the configured per-category limit without
-caching the complete remote category:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
-  ".\scripts\download_amazon_categories.ps1" `
-  -Limit 25000
-```
-
-The public dataset provides timestamps, users, parent products, ratings, verification
-and helpful votes, but no campaign labels. `Subscription_Boxes` contains only 16,216
-source records, so the verified raw total is 816,216 rather than 825,000. Rows are never
-duplicated to satisfy a requested limit.
-
-## Optional product catalogue
-
-Provide CSV, JSON, or JSONL with a product identifier and actual launch field:
-
-```json
-{"product_id":"B00EXAMPLE","launch_time":"2024-05-01T09:00:00Z"}
-```
-
-Accepted identifiers:
-
-```text
-product_id, parent_asin, asin
-```
-
-Accepted launch fields:
-
-```text
-launch_time, launched_at, release_date, created_at
-```
-
-## Build the temporal dataset
-
-If only Amazon timestamp enrichment and controlled campaign splits are needed, skip
-the independent text-classifier pipeline entirely:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
-  ".\scripts\download_amazon_categories.ps1" `
-  -Limit 25000 `
-  -BuildTemporalBundle `
-  -CampaignScenarioCount 0 `
-  -BundleOutputDirectory "data/processed/temporal_bundle"
-```
-
-This creates `behavior/` and `campaign/` outputs without labeled-text preparation or
-text augmentation. Amazon rows retain observed timestamps; campaign rows are separate
-controlled examples whose timestamps are generated from the learned Amazon profiles.
-`0` makes the controlled scenario count match the actual observed total. The pinned
-`Subscription_Boxes` source has only 16,216 reviews, so the 33-category total is
-816,216 rather than duplicating records to force 825,000.
-
-The completed manifests report:
-
-```text
-Raw rows:                   816,216
-Rejected invalid rows:       2,834
-Duplicate review IDs:        1,088
-Valid observed events:     812,294
-Controlled scenario rows:  816,216
-Campaign train:            571,315
-Campaign validation:       122,406
-Campaign test:             122,495
-```
-
-Inspect the current temporal outputs:
-
-```powershell
-Get-Content data/processed/temporal_bundle/manifest.json
-Get-Content data/processed/temporal_bundle/behavior/manifest.json
-Get-Content data/processed/temporal_bundle/campaign/manifest.json
-```
-
-### Optional complete text and temporal smoke build
-
-Smoke build using the current Amazon sample:
-
-```powershell
-python -m bot_campaign.cli build-dataset-bundle `
-  --labeled-input data/raw/product_reviews.jsonl data/raw/kaggle_fake_reviews `
-  --behavioral-input data/raw/amazon_all_beauty_sample.jsonl `
-  --output-dir data/processed/dataset_bundle `
-  --augmentation-count 7000 `
-  --campaign-scenario-count 2000 `
-  --max-synthetic-fraction 0.25 `
-  --seed 42
-```
-
-With real platform launch data, add:
-
-```powershell
---product-catalog data/raw/product_catalog.jsonl
-```
-
-Inspect the optional smoke-build manifest:
-
-```powershell
-Get-Content data/processed/dataset_bundle/manifest.json
-```
-
-Inspect its learned temporal distributions:
-
-```powershell
-Get-Content data/processed/dataset_bundle/behavior/profile.json
-```
-
-Inspect five derived behavioral events:
-
-```powershell
-Get-Content data/processed/dataset_bundle/behavior/events.jsonl -TotalCount 5 |
-    ForEach-Object { $_ | ConvertFrom-Json } |
-    Format-List
-```
-
-Inspect five timestamp-aware campaign training events:
-
-```powershell
-Get-Content data/processed/dataset_bundle/campaign/train.jsonl -TotalCount 5 |
-    ForEach-Object { $_ | ConvertFrom-Json } |
-    Format-List
-```
-
-## Train the independent review-text model
-
-This command retains the TF-IDF regression baseline. It is useful for measuring whether
-DistilBERT adds value and as a lightweight fallback, but it is not the promoted path:
-
-```powershell
-python -m bot_campaign.cli train `
-  --data data/processed/dataset_bundle/text/training.jsonl `
-  --test-data data/processed/dataset_bundle/text/real/test.jsonl `
-  --baseline-data data/processed/dataset_bundle/text/real/train.jsonl `
-  --min-pr-auc-lift 0.05 `
-  --output artifacts/review_model.joblib
-```
-
-The augmented candidate must improve real-only test PR-AUC by at least 5% before it is
-promoted. Both candidate and baseline metrics are written to:
-
-```text
-reports/generated/baseline_metrics.json
-```
-
-Train and tune the promoted individual-review DistilBERT with Ray and MLflow:
-
-```powershell
-docker compose up -d mlflow
-python training/ray_review_train.py --smoke --gpus-per-trial 0
-```
-
-The trainer rejects exact normalized-text overlap across train/validation/test, keeps
-synthetic reviews in training only, tunes against real validation data, and evaluates
-the chosen trial once on real test data. The output is
-`artifacts/review_distilbert/`. Full GPU commands and UI verification are in
-[`docs/TRAIN_MODEL_AND_UI.md`](docs/TRAIN_MODEL_AND_UI.md).
-
-## Train the hybrid campaign model
-
-The campaign trainer aggregates each complete `scenario_group_id` into one example.
-DistilBERT encodes up to eight reviews per group; the numeric branch receives burst,
-inter-arrival, rating, verification, launch, UTC-hour, weekend, and recent-activity
-features. Labels, scenario names, IDs, and provenance strings are not model inputs.
-
-First run a small end-to-end CPU smoke test. MLflow must be listening on port 5001:
-
-```powershell
-docker compose up -d mlflow
-python training/ray_train.py --smoke --gpus-per-trial 0
-```
-
-This downloads `distilbert-base-uncased` once, starts a local Ray runtime, trains on a
-small group-safe subset, evaluates validation/test subsets, writes the selected bundle
-to `artifacts/campaign_model`, logs all trial metrics, and registers the selected MLflow
-PyFunc model. Inspect it at `http://localhost:5001`.
-
-After the smoke run passes, use the complete splits on a CUDA machine:
-
-```powershell
-python training/ray_train.py `
-  --train-data data/processed/temporal_bundle/campaign_v3/train.jsonl `
-  --validation-data data/processed/temporal_bundle/campaign_v3/validation.jsonl `
-  --test-data data/processed/temporal_bundle/campaign_v3/test.jsonl `
-  --num-samples 12 `
-  --epochs 20 `
-  --cpus-per-trial 4 `
-  --gpus-per-trial 1
-```
-
-Validation selects the decision threshold needed to meet the requested precision. The
-test split is evaluated once after Ray chooses a trial. Do not promote the MLflow model
-until campaign recall and legitimate-burst false-positive gates also pass.
-
-## Schedule the pipeline with Airflow
-
-Airflow is the outer scheduler; Ray Tune remains the inner hyperparameter scheduler.
-Mount `orchestration/dags` into the Airflow 3 scheduler/worker and configure the Ray Jobs
-and input variables described in [`orchestration/README.md`](orchestration/README.md).
-The DAG is a six-task relay. It runs only one complete retraining run at a time
-(`max_active_runs=1`), does not backfill old dates (`catchup=False`), and follows the
-`BOT_CAMPAIGN_RETRAIN_CRON` schedule. If that variable is empty, trigger it manually.
-
-```text
-submit_temporal_etl
-        |
-wait_for_temporal_etl
-        |
-submit_review_training
-        |
-wait_for_review_training
-        |
-submit_campaign_training
-        |
-wait_for_campaign_training
-```
-
-### What each Airflow task does
-
-| Task | What it does | What it triggers or checks |
-|---|---|---|
-| `submit_temporal_etl` | Starts the data-preparation stage through the Ray Jobs API. | Runs `build-temporal-bundle`, then `generate-campaign-splits`; writes `data/processed/temporal_bundle/` and `campaign_v3/`. |
-| `wait_for_temporal_etl` | Polls the submitted Ray job every 60 seconds. | Continues only when Ray reports `SUCCEEDED`; fails on `FAILED` or `STOPPED`. |
-| `submit_review_training` | Starts individual-review model training. | Runs `training/ray_review_train.py` on the text train/validation/test JSONL files. |
-| `wait_for_review_training` | Monitors the review training submission. | Uses the submission ID saved by Airflow XCom; `reschedule` releases the Airflow worker while waiting. |
-| `submit_campaign_training` | Starts coordinated-campaign model training. | Runs `training/ray_train.py` on the `campaign_v3` splits and writes `artifacts/candidates/campaign_model/`. |
-| `wait_for_campaign_training` | Monitors campaign training until completion. | The DAG finishes only after Ray reports that the campaign job succeeded. |
-
-Airflow does not perform the expensive training itself. It sends commands to Ray,
-stores each Ray submission ID in XCom, and starts the next stage only after the previous
-stage succeeds. Ray Tune performs the trials and MLflow records parameters, metrics,
-epochs, artifacts, and model versions. New runs use up to 12 trials, a maximum of 20
-epochs per trial, and ASHA early stopping.
-
-The two data commands run in the project image on the Ray head, so the Airflow scheduler
-does not need the project ML dependencies installed locally. The training commands use
-the MLflow endpoint `http://mlflow:5000` and Ray storage at
-`artifacts/ray_results/`.
-
-### Trigger the DAG manually
-
-```powershell
-docker compose -f orchestration/docker-compose.airflow.yml exec airflow-api-server `
-  airflow dags trigger bot_campaign_model_retraining
-```
-
-For GPU trials, start Ray with the GPU overlay and start Airflow with GPU submission
-settings before triggering the DAG:
-
-```powershell
-.\scripts\start_detectra.ps1 -Gpu
+.\scripts\start_detectra.ps1 -Gpu -Observability -Build
 .\scripts\start_airflow.ps1 -Gpu
 ```
 
-`-Gpu` sets `BOT_CAMPAIGN_GPUS_PER_TRIAL=1` for the Ray submissions. Ray must report
-an available GPU in `ray status`; otherwise the jobs run on CPU or remain pending.
+Omit `-Build` during ordinary restarts. GPU access is assigned only to `ray-worker`, so
+Ray does not advertise one physical GPU twice.
 
-### Monitor or stop a run
+Verify startup:
 
-Open Airflow at `http://localhost:8084`. A sensor shown as **Up for Reschedule** is
-usually waiting normally, not failing. To inspect a run from PowerShell:
+```powershell
+docker compose --profile stream --profile observability ps
+docker compose -f orchestration/docker-compose.airflow.yml ps
+Invoke-RestMethod http://localhost:8000/health/live
+Invoke-RestMethod http://localhost:8000/health/ready
+Invoke-WebRequest http://localhost:8084 -UseBasicParsing
+docker compose exec ray-head ray status --address=127.0.0.1:6379
+```
+
+For GPU mode:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
+  exec ray-worker nvidia-smi
+```
+
+`0.0/1.0 GPU` means Ray sees one free GPU. A running GPU trial normally shows
+`1.0/1.0 GPU`.
+
+## Local service directory
+
+| Service | URL | Expected result |
+|---|---|---|
+| Detectra | `http://localhost:8000` | Review and campaign UI |
+| OpenAPI | `http://localhost:8000/docs` | Interactive API documentation |
+| Readiness | `http://localhost:8000/health/ready` | Model and dependency status |
+| Metrics | `http://localhost:8000/metrics` | Prometheus exposition |
+| Spark master | `http://localhost:8082` | Streaming application |
+| Spark worker | `http://localhost:8083` | Executor and resource state |
+| Ray | `http://localhost:8265` | Jobs, nodes, logs and resources |
+| MLflow | `http://localhost:5001` | Experiments and models |
+| Prometheus | `http://localhost:9090/targets` | Scrape targets marked `UP` |
+| Grafana | `http://localhost:3000` | Provisioned dashboards |
+| Elasticsearch | `http://localhost:9200/_cluster/health` | Cluster health JSON |
+| Kibana | `http://localhost:5601` | `filebeat-*` log discovery |
+| Airflow | `http://localhost:8084` | DAG list and runs |
+
+Local Grafana and Airflow credentials are `admin` / `admin`. Replace them before
+exposing either service beyond the local machine.
+
+## PowerShell launcher reference
+
+| Script | Purpose | Example |
+|---|---|---|
+| `scripts/start_detectra.ps1` | Start app, stream, training and monitoring services | `.\scripts\start_detectra.ps1 -Gpu -Observability -Build` |
+| `scripts/start_airflow.ps1` | Initialize PostgreSQL and start Airflow | `.\scripts\start_airflow.ps1 -Gpu` |
+| `scripts/deploy_kubernetes.ps1` | Apply Kubernetes and pin GHCR images | `.\scripts\deploy_kubernetes.ps1 -ImageTag <GIT_SHA> -Gpu` |
+| `scripts/download_amazon_categories.ps1` | Download Amazon data and build one bundle | `.\scripts\download_amazon_categories.ps1 -Limit 25000 -BuildTemporalBundle -CampaignScenarioCount 2000 -Seed 42` |
+
+Use either `-BuildTemporalBundle` or `-BuildBundle`, never both. Do not redownload data
+when DVC reports that the pipeline is current.
+
+## Docker Compose runbook
+
+Start individual services:
+
+```powershell
+# Kafka and topics
+docker compose up -d kafka kafka-init
+
+# Spark and continuous scorer
+docker compose up -d spark-master spark-worker
+docker compose --profile stream up -d spark-stream campaign-scorer
+
+# API, experiments and metrics
+docker compose up -d api mlflow prometheus grafana
+
+# Searchable logs
+docker compose --profile observability up -d elasticsearch kibana filebeat
+
+# Ray CPU
+docker compose up -d ray-head ray-worker
+
+# Ray GPU recreation
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml `
+  up -d --force-recreate ray-head ray-worker
+```
+
+Inspect and restart:
+
+```powershell
+docker compose --profile stream --profile observability ps -a
+docker compose logs --tail 200 api
+docker compose logs --tail 200 spark-stream campaign-scorer
+docker compose logs --tail 200 ray-head ray-worker
+docker compose logs -f campaign-scorer
+docker compose restart api
+docker compose --profile stream restart spark-stream campaign-scorer
+```
+
+Stop without deleting persistent data:
+
+```powershell
+docker compose --profile stream --profile observability stop
+docker compose -f orchestration/docker-compose.airflow.yml stop
+```
+
+Remove containers and networks while preserving named volumes:
+
+```powershell
+docker compose --profile stream --profile observability down
+docker compose -f orchestration/docker-compose.airflow.yml down
+```
+
+Do not add `--volumes` during routine cleanup. Named volumes contain MLflow,
+Prometheus, Grafana, Elasticsearch, Filebeat and Airflow PostgreSQL state.
+
+## Kafka and Spark end-to-end run
+
+```text
+streaming/producer.py
+  -> reviews.raw.v1
+  -> spark/review_stream.py
+  -> reviews.analysis-windows.v1
+  -> streaming/campaign_scorer.py
+  -> reviews.campaign-scores.v1
+  -> FastAPI/UI
+```
+
+List topics and publish held-out events:
+
+```powershell
+docker compose exec kafka `
+  /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list
+
+docker compose exec campaign-scorer python streaming/producer.py `
+  --input data/processed/temporal_bundle/campaign_v3/test.jsonl `
+  --bootstrap-servers kafka:29092 `
+  --rate 10
+```
+
+Inspect each hand-off:
+
+```powershell
+docker compose exec kafka `
+  /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 `
+  --topic reviews.raw.v1 --from-beginning --max-messages 5
+
+docker compose exec kafka `
+  /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 `
+  --topic reviews.analysis-windows.v1 --from-beginning --max-messages 5
+
+docker compose exec kafka `
+  /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 `
+  --topic reviews.campaign-scores.v1 --from-beginning --max-messages 5
+```
+
+Containers use `kafka:29092`; programs running on Windows use `localhost:9092`.
+
+## API usage
+
+```powershell
+$review = @{
+  review_id = "runbook-review-001"
+  user_id = "runbook-user-001"
+  product_id = "demo-smartwatch"
+  text = "The product is excellent and works exactly as expected."
+  rating = 5
+  timestamp = (Get-Date).ToUniversalTime().ToString("o")
+  verified_purchase = $false
+  helpful_votes = 0
+  language = "en"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8000/v1/reviews/score `
+  -ContentType "application/json" `
+  -Body $review
+
+Invoke-RestMethod http://localhost:8000/v1/reviews/recent
+Invoke-RestMethod http://localhost:8000/v1/campaigns
+Invoke-RestMethod http://localhost:8000/v1/ops/summary
+```
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/v1/reviews/score` | Score one review |
+| `POST` | `/v1/reviews/batch-score` | Score up to 500 reviews |
+| `GET` | `/v1/reviews/recent` | Recent scored reviews |
+| `GET` | `/v1/campaigns` | Campaign candidates |
+| `POST` | `/v1/campaigns/{id}/decision` | Confirm, dismiss or restore |
+| `POST` | `/v1/demo/replay` | Start a controlled replay |
+| `GET` | `/v1/ops/summary` | Deployment/service summary |
+| `GET` | `/health/live` | Process liveness |
+| `GET` | `/health/ready` | Model/dependency readiness |
+| `GET` | `/metrics` | Prometheus metrics |
+
+## Airflow, Ray and MLflow training
+
+```text
+submit_temporal_etl -> wait_for_temporal_etl
+                    -> submit_review_training -> wait_for_review_training
+                    -> submit_campaign_training -> wait_for_campaign_training
+```
+
+Airflow submits jobs; Ray Tune performs trials; MLflow records results. Training scripts
+default to 12 trials, a maximum of 3 epochs and ASHA early stopping. Weak trials may
+stop before epoch 20. GPU mode requests one GPU and one concurrent trial.
 
 ```powershell
 docker compose -f orchestration/docker-compose.airflow.yml exec airflow-api-server `
-  airflow tasks states-for-dag-run bot_campaign_model_retraining <RUN_ID>
+  airflow dags list
+
+docker compose -f orchestration/docker-compose.airflow.yml exec airflow-api-server `
+  airflow dags trigger bot_campaign_model_retraining
+
+docker compose -f orchestration/docker-compose.airflow.yml exec airflow-api-server `
+  airflow dags trigger bot_campaign_streaming_smoke
 ```
 
-Mark the DAG run failed from the Airflow UI to stop its orchestration. If the Ray job
-continues, stop the corresponding job separately from the Ray dashboard at
-`http://localhost:8265` or with the Ray Jobs CLI. A queued run can be expected when
-another run is active because `max_active_runs=1`.
-
-Each training output is written under `artifacts/candidates/`. The DAG never silently
-promotes a model or changes the API mount. An approved MLflow version is promoted by a
-reviewed deployment-manifest commit.
-
-## Stream reviews through the campaign model
+Monitor Ray:
 
 ```powershell
-# Infrastructure and event-time feature windows
-docker compose up -d kafka spark-master spark-worker
-docker compose --profile stream up -d spark-stream
-
-# Scorer (requires artifacts/campaign_model from training)
-docker compose --profile score up -d campaign-scorer
-
-# Replay controlled held-out events; use --rate 0 only for load testing
-python streaming/producer.py `
-  --input data/processed/temporal_bundle/campaign_v3/test.jsonl `
-  --bootstrap-servers localhost:9092 `
-  --rate 100
-
-# Inspect scored campaign windows
-docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh `
-  --bootstrap-server kafka:29092 `
-  --topic reviews.campaign-scores.v1 `
-  --from-beginning `
-  --max-messages 5
+docker compose exec ray-head ray job list --address=http://127.0.0.1:8265
+docker compose exec ray-head ray status --address=127.0.0.1:6379
 ```
 
-The topic sequence is `reviews.raw.v1` → `reviews.analysis-windows.v1` →
-`reviews.campaign-scores.v1`. Spark uses a two-hour watermark and one-hour windows
-sliding every ten minutes. Product, account, and semantic-token routes allow the
-DistilBERT graph to join coordinated reviews across products and categories. The scorer commits a Kafka offset only
-after its output is delivered. A campaign score is evidence for moderation; it is not
-automatic proof.
-
-## Run the API and UI
+`Up for Reschedule` is normal sensor behavior. A second run remains queued while one is
+active because `max_active_runs=1`. To stop a workflow, mark the DAG run **Failed** in
+Airflow, then stop any remaining Ray submission:
 
 ```powershell
-python -m uvicorn bot_campaign.api:app --reload
+docker compose exec ray-head ray job stop <RAY_SUBMISSION_ID> `
+  --address=http://127.0.0.1:8265
 ```
 
-Open:
+Candidate outputs go under `artifacts/candidates/`; training does not silently replace
+the model bundles mounted by the serving API.
 
-- UI: `http://127.0.0.1:8000`
-- API documentation: `http://127.0.0.1:8000/docs`
-- Readiness: `http://127.0.0.1:8000/health/ready`
-- Prometheus metrics: `http://127.0.0.1:8000/metrics`
-
-The API serves the UI itself. Ports 3000 and 5001 are Grafana and MLflow only when those
-services are started; they are not alternate UI ports.
-
-## Test
+## Data and model versioning
 
 ```powershell
-python -m ruff check src tests
-python -m pytest -q -p no:cacheprovider -p no:tmpdir
+python -m dvc status
+python -m dvc dag
+python -m dvc repro
+python -m dvc push
+git lfs ls-files
 ```
 
-Focused data tests:
+- Git tracks code, tests, manifests, `dvc.yaml` and `dvc.lock`.
+- DVC tracks datasets and reproducible pipeline outputs.
+- Git LFS stores promoted model binaries while Git stores their pointers.
+- MLflow tracks experiments and model versions.
+
+## Kubernetes runbook
+
+Preflight and render without changing the cluster:
 
 ```powershell
-python -m pytest tests/test_labeled_datasets.py tests/test_temporal.py -v `
-  -p no:cacheprovider -p no:tmpdir
+kubectl config current-context
+kubectl cluster-info
+kubectl get nodes
+kubectl get storageclass
+kubectl kustomize k8s
+kubectl kustomize k8s/overlays/gpu
+kubectl kustomize k8s/overlays/observability
+kubectl kustomize k8s/overlays/full
+kubectl kustomize k8s/overlays/full-gpu
+kubectl kustomize k8s/jobs
 ```
 
-## Reproduce the optional text-model DVC stages
+Deployment choices:
 
 ```powershell
-python -m pip install -e ".[mlops]"
-dvc repro build_dataset_bundle
-dvc repro train_product_model
+# Core CPU
+kubectl apply -k k8s
+
+# Core GPU
+kubectl apply -k k8s/overlays/gpu
+
+# Core plus Elasticsearch, Filebeat and Kibana
+kubectl apply -k k8s/overlays/observability
 ```
 
-Raw datasets and generated outputs remain ignored by Git. Commit source, tests, DVC
-metadata, and manifests stored through DVC--not raw archives or model binaries.
+Full overlays include Airflow. Copy
+`k8s/secrets/airflow-secrets.example.yaml` to an ignored `*.local.yaml` file, replace
+every placeholder, and apply the private Secret first:
 
-## Main script relationships
+```powershell
+kubectl apply -f k8s/base/namespace.yaml
+Copy-Item k8s/secrets/airflow-secrets.example.yaml `
+  k8s/secrets/airflow-secrets.local.yaml
+code k8s/secrets/airflow-secrets.local.yaml
+kubectl apply -f k8s/secrets/airflow-secrets.local.yaml
+kubectl apply -k k8s/overlays/full
+kubectl apply -k k8s/overlays/full-gpu
+```
 
-| File | Responsibility |
+Core DVC/Grafana credentials and optional private-GHCR authentication use
+`k8s/secrets/core-secrets.example.yaml` and
+`k8s/secrets/ghcr-pull-secret.example.yaml`. Example files contain placeholders only;
+populated `k8s/secrets/*.local.yaml` files are ignored and must never be committed.
+
+Deploy immutable GHCR images:
+
+```powershell
+$sha = "REPLACE_WITH_PUBLISHED_GIT_SHA"
+.\scripts\deploy_kubernetes.ps1 -ImageTag $sha
+.\scripts\deploy_kubernetes.ps1 -ImageTag $sha -Gpu
+```
+
+```text
+ghcr.io/njchathura-boop/bot-review-campaign-api:<git-sha>
+ghcr.io/njchathura-boop/bot-review-campaign-jobs:<git-sha>
+```
+
+Inspect and port-forward:
+
+```powershell
+kubectl -n bot-campaign get pods -w
+kubectl -n bot-campaign get deployments,services,statefulsets,jobs,cronjobs,pvc
+kubectl -n bot-campaign get events --sort-by=.lastTimestamp
+kubectl -n bot-campaign logs deployment/detectra-api --tail=200
+kubectl -n bot-campaign logs deployment/detectra-ray --tail=200
+
+# Run each port-forward in its own PowerShell window
+kubectl -n bot-campaign port-forward service/detectra-api 8000:8000
+kubectl -n bot-campaign port-forward service/detectra-ray 8265:8265
+kubectl -n bot-campaign port-forward service/detectra-mlflow 5001:5000
+kubectl -n bot-campaign port-forward service/detectra-prometheus 9090:9090
+kubectl -n bot-campaign port-forward service/detectra-grafana 3000:3000
+kubectl -n bot-campaign port-forward service/detectra-kibana 5601:5601
+kubectl -n bot-campaign port-forward service/detectra-airflow-api 8084:8080
+```
+
+ETL, training and rollout:
+
+```powershell
+$etlJob = "detectra-etl-$(Get-Date -Format yyyyMMddHHmmss)"
+kubectl -n bot-campaign create job $etlJob --from=cronjob/detectra-etl
+kubectl -n bot-campaign logs -f "job/$etlJob"
+
+kubectl delete job detectra-review-training -n bot-campaign --ignore-not-found
+kubectl apply -k k8s/jobs
+kubectl -n bot-campaign logs -f job/detectra-review-training
+
+kubectl -n bot-campaign rollout status deployment/detectra-api --timeout=600s
+kubectl -n bot-campaign rollout restart deployment/detectra-api
+kubectl -n bot-campaign rollout history deployment/detectra-api
+kubectl -n bot-campaign rollout undo deployment/detectra-api
+```
+
+The Kubernetes review Job requests 20 trials, up to 3 epochs, one concurrent trial and
+ASHA early stopping.
+
+Remove an overlay only after inspecting persistent volumes:
+
+```powershell
+kubectl delete -k k8s/overlays/full-gpu
+kubectl -n bot-campaign get pvc
+```
+
+## Testing
+
+```powershell
+python -m compileall -q src training streaming spark orchestration/dags
+ruff check src tests training streaming spark scripts
+pytest -q -p no:cacheprovider
+docker compose config --quiet
+docker compose -f orchestration/docker-compose.airflow.yml config --quiet
+kubectl kustomize k8s | Out-Null
+kubectl kustomize k8s/overlays/full | Out-Null
+kubectl kustomize k8s/overlays/full-gpu | Out-Null
+```
+
+## CI/CD
+
+### Deployment lifecycle in one picture
+
+```text
+Developer changes code, data metadata or promoted model pointers
+                              |
+                              v
+                     Git commit and push
+                              |
+             +----------------+----------------+
+             |                                 |
+             v                                 v
+       GitHub Actions CI                 Version tag v* or
+  syntax + tests + image scan             manual CD trigger
+             |                                 |
+             v                                 v
+       Build is accepted             Build three Docker images
+                                               |
+                                               v
+                                  Push immutable Git-SHA images
+                                             to GHCR
+                                               |
+                                               v
+                                   Render and apply Kubernetes
+                                               |
+                                               v
+                                  Wait for workload readiness
+                                               |
+                                               v
+                                Run an in-cluster smoke-test pod
+```
+
+Git versions source and configuration, Git LFS materializes the promoted large model
+binaries, and DVC identifies reproducible dataset/pipeline versions. DVC does not deploy
+or trigger Airflow by itself: a person, CI job or scheduled workflow must execute the DVC
+and Airflow operations.
+
+### What triggers CI
+
+Pull requests, pushes to `main`, and `v*` tags run
+`.github/workflows/ci.yml`. CI performs:
+
+1. Git LFS materialization and promoted-model bundle validation.
+2. Python 3.11 dependency installation and a small model-backed smoke training run.
+3. `python -m compileall -q orchestration/dags` for the Airflow DAG source.
+4. Ruff static checks and Pytest tests.
+5. A Docker API/UI image build.
+6. Trivy vulnerability scanning and project policy enforcement.
+
+`compileall` asks whether Python can convert every DAG source file to bytecode. It catches
+syntax errors such as a missing colon or bracket without executing an expensive training
+workflow. It does **not** prove that Ray, PostgreSQL or an external endpoint is reachable.
+An additional runtime check such as `airflow dags list-import-errors` inside the Airflow
+image is stronger because it asks Airflow to import the DAG with its real dependencies.
+
+Trivy inspects the final container's operating-system packages and language dependencies
+for published HIGH or CRITICAL vulnerabilities. The repository then runs
+`scripts/enforce_trivy.py` against Trivy's JSON result. This is software-composition
+analysis of known vulnerabilities; it is not proof that the application has no unknown
+security flaws.
+
+### What triggers CD
+
+A `v*` tag or manual `workflow_dispatch` runs `.github/workflows/cd.yml`. It builds,
+scans and publishes three images:
+
+| Image | Purpose |
 |---|---|
-| `src/bot_campaign/data.py` | Explicit text-label and review-event loaders |
-| `src/bot_campaign/labeled_datasets.py` | Ecommerce label normalization and leakage-safe splits |
-| `scripts/download_amazon_categories.ps1` | Restartable 33-category download, verification, and temporal build |
-| `src/bot_campaign/amazon.py` | Direct bounded HTTP JSONL download, source revision, and canonical mapping |
-| `src/bot_campaign/temporal.py` | Launch provenance, past-only temporal features, profiles, scenarios |
-| `src/bot_campaign/dataset_bundle.py` | Separate temporal-only and complete-bundle orchestrators |
-| `src/bot_campaign/synthetic.py` | Deterministic, train-only text augmentation |
-| `src/bot_campaign/model.py` | Review-text model training, evaluation, and inference |
-| `src/bot_campaign/review_transformer.py` | Promoted review DistilBERT bundle, leakage checks, and inference |
-| `src/bot_campaign/campaign.py` | Review coordination graph and campaign evidence |
-| `src/bot_campaign/campaign_features.py` | Shared batch/stream group feature contract |
-| `src/bot_campaign/hybrid_model.py` | DistilBERT and temporal-feature fusion, bundle, MLflow wrapper |
-| `src/bot_campaign/cli.py` | Command-line entry point |
-| `src/bot_campaign/api.py` | FastAPI application and static UI |
-| `streaming/producer.py` | Canonical event replay to Kafka |
-| `spark/review_stream.py` | Cross-product product/account/semantic routing windows |
-| `src/bot_campaign/campaign_graph.py` | DistilBERT/account/burst graph connected components |
-| `streaming/campaign_scorer.py` | Graph discovery, hybrid scoring and safe offset commits |
-| `training/ray_train.py` | Ray Tune training, held-out evaluation, MLflow tracking/registry |
-| `training/ray_review_train.py` | Ray Tune and MLflow training for individual-review DistilBERT |
+| `ghcr.io/njchathura-boop/bot-review-campaign-api:<git-sha>` | FastAPI, UI and promoted models |
+| `ghcr.io/njchathura-boop/bot-review-campaign-jobs:<git-sha>` | DVC, ETL and Ray training |
+| `ghcr.io/njchathura-boop/bot-review-campaign-airflow:<git-sha>` | Airflow and project DAGs |
 
-## Deployment
+The Git SHA is immutable and connects the running container to one exact source revision.
+`latest` is convenient for local work but is not a reliable audit or rollback identity.
 
-The supported Kubernetes packaging is documented in
-[`k8s/README.md`](k8s/README.md). It defines two pullable application images and
-separate workloads for API/UI serving, Ray training, DVC ETL, MLflow, Prometheus, and
-Grafana. The API image includes the promoted Git-LFS model bundles; the jobs image
-contains the reproducible ETL and training environment.
+The `deploy-staging` job runs only after image publishing succeeds. It requires the
+GitHub `staging` environment and the `KUBE_CONFIG_DATA` secret containing a base64-encoded
+kubeconfig for a cluster reachable from the GitHub runner. A GitHub-hosted runner cannot
+normally reach a private Docker Desktop cluster on a laptop; use a reachable staging
+cluster or a deliberately configured self-hosted runner.
 
-Local services:
+### What staging CD currently deploys
 
-```powershell
-docker compose up -d api prometheus grafana
-docker compose ps
+The committed staging workflow currently renders `k8s/base`. It deploys and verifies the
+API, Ray, MLflow, Prometheus and Grafana. It publishes the Airflow image but does not
+deploy Airflow, Elasticsearch, Kibana or Filebeat in this base-profile staging job.
+
+That is an important scope statement for a viva: the full resources exist in Kustomize
+overlays, while the automated staging job presently validates the smaller base profile.
+If staging is intended to represent the entire platform, change CD to render
+`k8s/overlays/full`. Use `k8s/overlays/full-gpu` only for a cluster with an NVIDIA GPU,
+compatible container runtime and NVIDIA Kubernetes device plugin; otherwise the
+GPU-requesting Ray pod remains Pending.
+
+| Kustomize target | Adds |
+|---|---|
+| `k8s/base` | API, Ray, MLflow, Prometheus, Grafana, storage and suspended ETL CronJob |
+| `k8s/overlays/observability` | Elasticsearch, Kibana and Filebeat |
+| `k8s/overlays/full` | Observability plus Airflow and PostgreSQL |
+| `k8s/overlays/full-gpu` | Full platform plus Ray/Airflow GPU configuration |
+
+Kafka, Spark and the continuous campaign scorer remain part of the Docker Compose
+streaming proof of concept; the current Kubernetes manifests do not deploy them. A future
+full streaming deployment should add managed Kafka/Spark or operator-managed equivalents.
+
+### Deployment, DaemonSet, StatefulSet and Job
+
+| Controller | Question it answers | Detectra example |
+|---|---|---|
+| Deployment | How many replaceable application replicas should be running? | API, Ray, MLflow, Grafana, Kibana |
+| DaemonSet | Should one agent run on every eligible node? | Filebeat reads each node's container logs |
+| StatefulSet | Which stateful pods need stable identity and storage? | Elasticsearch and Airflow PostgreSQL |
+| Job | Which finite task must run to completion? | Airflow migration, Kibana setup, training submission |
+| CronJob | When should a new Job be created? | Weekly ETL, committed with `suspend: true` |
+
+A Deployment with three replicas creates three pods anywhere suitable. A DaemonSet on a
+five-node cluster normally creates five pods, one per eligible node. Filebeat is a
+DaemonSet because logs exist on every node, whereas FastAPI is a Deployment because it
+needs a chosen replica count rather than one copy per node.
+
+### How CD waits for Kubernetes
+
+`kubectl apply` only confirms that Kubernetes accepted the desired state; it does not
+mean the application has loaded its image and model. CD therefore executes commands such
+as:
+
+```bash
+kubectl -n bot-campaign rollout status deployment/detectra-api --timeout=600s
+kubectl -n bot-campaign rollout status deployment/detectra-ray --timeout=600s
+kubectl -n bot-campaign rollout status deployment/detectra-mlflow --timeout=300s
+kubectl -n bot-campaign rollout status deployment/detectra-prometheus --timeout=300s
+kubectl -n bot-campaign rollout status deployment/detectra-grafana --timeout=300s
 ```
 
-Full streaming/training services:
+Kubernetes creates the replacement pod, pulls the image, starts the process and evaluates
+its readiness probe. `rollout status` succeeds only when the new Deployment revision is
+available, or fails after the timeout. API and Ray receive longer timeouts because their
+images and model/runtime initialization are heavier.
 
-```powershell
-docker compose up -d kafka spark-master spark-worker mlflow ray-head ray-worker
-docker compose --profile stream up -d spark-stream
+For a future `full` CD deployment, also wait for Airflow API/scheduler/DAG processor,
+Kibana, the Filebeat DaemonSet, the Elasticsearch and PostgreSQL StatefulSets, and the
+Airflow migration Job. Each controller has its matching `kubectl rollout status` or
+`kubectl wait --for=condition=complete` check.
+
+### The temporary smoke-test pod
+
+After the base rollouts succeed, GitHub Actions automatically runs an ephemeral curl pod:
+
+```bash
+kubectl -n bot-campaign run cd-smoke-${GITHUB_RUN_ID} --rm -i --restart=Never \
+  --image=curlimages/curl:8.10.1 -- \
+  sh -ec 'curl -fsS http://detectra-api:8000/health/ready && \
+          curl -fsS http://detectra-api:8000/metrics | grep review_scans_total'
 ```
 
-Operational and rollback instructions are in
-[`docs/OPERATIONS.md`](docs/OPERATIONS.md). Distributed pipeline details are in
-[`docs/DISTRIBUTED_PIPELINE.md`](docs/DISTRIBUTED_PIPELINE.md). The exact ETL-to-model
-script call graph is in [`docs/ETL_STREAMING_MODEL.md`](docs/ETL_STREAMING_MODEL.md).
-Exact leakage-safe training and UI verification commands are in
-[`docs/TRAIN_MODEL_AND_UI.md`](docs/TRAIN_MODEL_AND_UI.md).
-The beginner-friendly, function-by-function source map and current regeneration decision
-are in [`docs/SCRIPT_FUNCTION_REFERENCE.md`](docs/SCRIPT_FUNCTION_REFERENCE.md).
-Monitoring dashboards, alert thresholds, CI checks, CD releases, secrets, and rollback
-procedures are in [`docs/MONITORING_AND_CICD.md`](docs/MONITORING_AND_CICD.md).
-The complete Git and DVC command reference is in
-[`docs/GIT_AND_DVC_COMMANDS.md`](docs/GIT_AND_DVC_COMMANDS.md).
+`--restart=Never` makes it a one-time pod and `--rm` deletes it when the check finishes.
+Because it runs inside the cluster, it verifies Kubernetes DNS, the `detectra-api`
+Service, cluster networking, API readiness and the Prometheus endpoint. A failed curl or
+missing metric returns a non-zero exit code and fails the GitHub Actions deployment.
 
-## CI/CD workflow
+### Training is not automatic model promotion
 
-Pull requests run [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It installs the
-project, runs smoke training, compiles the Airflow DAGs, checks lint, runs tests, builds
-the Docker image, and blocks high/critical Trivy findings.
-
-Pushing a semantic version tag such as `v1.2.0` starts
-[`.github/workflows/cd.yml`](.github/workflows/cd.yml). It publishes an immutable
-Git-SHA-tagged API image and jobs image, scans both, renders the Kustomize base, deploys
-to the protected `staging` environment, waits for the API, Ray, MLflow, Prometheus, and
-Grafana rollouts, and calls `/health/ready` and `/metrics` inside the cluster.
-
-Configure the GitHub `staging` environment with a base64-encoded `KUBE_CONFIG_DATA`
-secret before enabling deployment. Argo CD can watch `k8s/` and reconcile the same
-immutable image. The public UI cannot trigger deployments.
+Deploying the Kubernetes services does not by itself begin retraining. Training starts
+only when the separate Kubernetes training Job is applied or the Airflow DAG is manually
+or programmatically triggered. Ray produces a candidate and MLflow records its parameters,
+metrics and artifacts. The API continues serving the explicitly promoted model bundled in
+its image. After evaluation, promotion requires updating the approved artifacts, storing
+large binaries through Git LFS, committing/tagging the revision and allowing CD to build a
+new API image. This boundary prevents an unsuccessful experiment from silently replacing
+the production model.
 
 ```powershell
-git switch -c feat/my-change
-git add src web tests
-git commit -m "feat(api): describe the change"
-git push -u origin feat/my-change
-gh pr create --fill
-
 git switch main
 git pull --ff-only
-git tag -a v1.1.0 -m "Bot campaign detection v1.1.0"
-git push origin v1.1.0
+git tag -a v1.2.0 -m "Detectra v1.2.0"
+git push origin v1.2.0
+gh run list
+gh run watch
 ```
 
-## Git workflow
+The GitHub `staging` environment requires `KUBE_CONFIG_DATA`, containing a base64-encoded
+kubeconfig.
+
+## Troubleshooting
+
+| Symptom | Check | Recovery |
+|---|---|---|
+| Docker pipe missing | `docker version` | Start Docker Desktop and wait for Linux engine |
+| Ray `8265` refused | `docker compose ps -a ray-head ray-worker` | Recreate Ray in CPU/GPU mode |
+| Airflow `8084` unavailable | Airflow Compose `ps` and logs | Run `start_airflow.ps1` |
+| Airflow `No Status` | Older active DAG run | Wait or stop the older DAG/Ray job |
+| `Up for Reschedule` | Ray job status | Usually normal sensor behavior |
+| Spark runs but scores are empty | Topics and stream/scorer logs | Replay and inspect topics in order |
+| Kibana has no fields | Filebeat and Elasticsearch | Start observability; refresh `filebeat-*` |
+| Grafana is empty | Prometheus targets | Generate traffic and refresh time range |
+| Kubernetes `ImagePullBackOff` | Pod events and GHCR access | Publish SHA or add pull secret |
+| GPU trial pending | Ray, `nvidia-smi`, device plugin | Fix runtime or use CPU mode |
+
+For Docker disk pressure:
 
 ```powershell
-git status
-git diff --cached
-git commit -m "data: build role-separated temporal review dataset"
-git push origin feature/njc
+docker system df
+docker builder prune --all --force
+docker system df
 ```
 
-Do not commit directly to `main`, raw data, credentials, or local service volumes. The
-two promoted model directories are the exception for model binaries: Git stores their
-small Git-LFS pointers while LFS storage holds the actual release artifacts.
+Do not routinely use `docker volume prune`. If Ray stops during tuning, preserve
+`artifacts/ray_results/` and restart training with `--resume` to reuse completed trials
+and checkpoints.
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [`data/README.md`](data/README.md) | Dataset provenance, schemas and outputs |
+| [`data/BEGINNER_PROJECT_GUIDE.md`](data/BEGINNER_PROJECT_GUIDE.md) | Plain-English project explanation |
+| [`docs/ETL_STREAMING_MODEL.md`](docs/ETL_STREAMING_MODEL.md) | ETL, Kafka, Spark, graph and model flow |
+| [`docs/SCRIPT_FUNCTION_REFERENCE.md`](docs/SCRIPT_FUNCTION_REFERENCE.md) | Source and function reference |
+| [`docs/TRAIN_MODEL_AND_UI.md`](docs/TRAIN_MODEL_AND_UI.md) | Training and UI verification |
+| [`docs/MONITORING_AND_CICD.md`](docs/MONITORING_AND_CICD.md) | Metrics, CI, CD and rollback |
+| [`docs/GIT_AND_DVC_COMMANDS.md`](docs/GIT_AND_DVC_COMMANDS.md) | Git and DVC commands |
+| [`docs/LIVE_STREAMING_PIPELINE.md`](docs/LIVE_STREAMING_PIPELINE.md) | Focused live-stream test |
+| [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md) | Editable technical-report source |
+| [`orchestration/README.md`](orchestration/README.md) | Airflow configuration |
+| [`k8s/README.md`](k8s/README.md) | Kubernetes deployment reference |
+
+Final editable report:
+[`reports/Bot_Review_Campaign_Technical_Report_Professional.docx`](reports/Bot_Review_Campaign_Technical_Report_Professional.docx).
+Export it as `reports/Bot_Review_Campaign_Technical_Report_Professional.pdf` before
+submission.
+
+## Submission checklist
+
+- [ ] Rename the repository to `DA5402W_project_<team-id>_<roll-number>`.
+- [ ] Add `mlopslabsubmission-2026` as a collaborator.
+- [ ] Add team ID, names, roll numbers and contributions to README and report.
+- [ ] Confirm `main` is the evaluation branch.
+- [ ] Export the technical report to PDF.
+- [ ] Prepare a five-minute slide deck; no demonstration video is required.
+- [ ] Ensure Git LFS models and DVC metadata are evaluator-accessible.
+- [ ] Run tests and confirm GitHub Actions are green.
+- [ ] Submit the GitHub link, title, team details and PDF report.

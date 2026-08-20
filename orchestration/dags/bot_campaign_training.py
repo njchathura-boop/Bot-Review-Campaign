@@ -108,9 +108,9 @@ def submit_ray_job(*, model: str) -> str:
     elif model == "campaign":
         entrypoint = _entrypoint(
             "ray_train.py",
-            "data/processed/temporal_bundle/campaign_v3/train.jsonl",
-            "data/processed/temporal_bundle/campaign_v3/validation.jsonl",
-            "data/processed/temporal_bundle/campaign_v3/test.jsonl",
+            "data/processed/temporal_bundle/campaign/train.jsonl",
+            "data/processed/temporal_bundle/campaign/validation.jsonl",
+            "data/processed/temporal_bundle/campaign/test.jsonl",
             "artifacts/candidates/campaign_model",
         )
     else:

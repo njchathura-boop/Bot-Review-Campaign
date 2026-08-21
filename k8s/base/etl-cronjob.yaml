@@ -38,7 +38,7 @@ spec:
                   mountPath: /workspace
           containers:
             - name: etl
-              image: detectra-jobs
+              image: ghcr.io/njchathura-boop/bot-review-campaign-jobs:2026.08.21
               imagePullPolicy: IfNotPresent
               command: [bash, -lc]
               args:

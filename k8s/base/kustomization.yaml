@@ -23,7 +23,7 @@ labels:
 images:
   - name: detectra-api
     newName: ghcr.io/njchathura-boop/bot-review-campaign-api
-    newTag: latest
+    newTag: 2026.08.21-opt1
   - name: detectra-jobs
     newName: ghcr.io/njchathura-boop/bot-review-campaign-jobs
-    newTag: latest
+    newTag: 2026.08.21

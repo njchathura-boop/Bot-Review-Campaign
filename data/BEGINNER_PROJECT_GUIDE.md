@@ -2338,3 +2338,48 @@ The API image copies or mounts `web/` and `src/`. FastAPI mounts the directory w
 `index.html`, while `/app.js` and `/styles.css` are static assets. There is no separate
 frontend container in the local Compose stack. This reduces deployment moving parts and
 ensures the UI and API are released together with the same Git/image lineage.
+
+
+### DVC Stuff
+ python -m dvc remote add -d local_storage "C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\bot-campaign-dvc-storage"
+Setting 'local_storage' as a default remote.
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> git add .dvc/config
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> git commit -m "Configure local DVC storage path"
+[feature/njc f3a9e80] Configure local DVC storage path
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> python -m dvc add data/raw
+100% Adding...|█████████████████████████████████████████████████████████████|1/1 [00:00, 15.65file/s]
+                                                                                                     
+To track the changes with git, run:
+
+        git add 'data\raw.dvc'
+
+To enable auto staging, run:
+
+        dvc config core.autostage true
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> git add data/raw.dvc .gitignore .dvc/config
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> git commit -m "Track raw dataset via DVC"
+On branch feature/njc
+Your branch is ahead of 'origin/feature/njc' by 1 commit.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   docs/KUBERNETES_DEMO_RUNBOOK.md
+        modified:   k8s/secrets/airflow-secrets.example.yaml
+        modified:   k8s/secrets/core-secrets.example.yaml
+        modified:   k8s/secrets/ghcr-pull-secret.example.yaml
+
+no changes added to commit (use "git add" and/or "git commit -a")
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> python -m dvc push
+Collecting                                                                 |63.0 [00:00,  520entry/s]
+WARNING: Some of the cache files do not exist neither locally nor on remote. Missing cache files:
+md5: 4987a96931ba3d4d1547888f96ec3555.dir                                                            
+Pushing
+37 files pushed                                                                                      
+(.venv) PS C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project> 
+python -m dvc remote list
+local   C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\bot-campaign-dvc-storage
+local_storage   C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\bot-campaign-dvc-storage        
+(default)

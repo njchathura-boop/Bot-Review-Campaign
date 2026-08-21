@@ -33,9 +33,9 @@ $manifestPath = if ($Full -and $Gpu) {
     Join-Path $repositoryRoot "k8s"
 }
 
-$apiImage = "${Registry}/bot-review-campaign-api:${ImageTag}"
-$jobsImage = "${Registry}/bot-review-campaign-jobs:${ImageTag}"
-$airflowImage = "${Registry}/bot-review-campaign-airflow:${ImageTag}"
+$apiImage = "${Registry}/bot-review-campaign-api:2026.08.21-opt1"
+$jobsImage = "${Registry}/bot-review-campaign-jobs:2026.08.21"
+$airflowImage = "${Registry}/bot-review-campaign-airflow:56e149c"
 
 Write-Host "Cluster context: $(& kubectl config current-context)"
 Write-Host "Rendering manifests from $manifestPath"
@@ -46,15 +46,15 @@ if ($LASTEXITCODE -ne 0) { throw "Kubernetes manifest render failed." }
 # CronJobs, and the immutable Airflow migration Job before Kubernetes creates them.
 $renderedManifest = $renderedLines -join [Environment]::NewLine
 $renderedManifest = $renderedManifest.Replace(
-    "ghcr.io/njchathura-boop/bot-review-campaign-api:latest",
+    "ghcr.io/njchathura-boop/bot-review-campaign-api:2026.08.21-opt1",
     $apiImage
 )
 $renderedManifest = $renderedManifest.Replace(
-    "ghcr.io/njchathura-boop/bot-review-campaign-jobs:latest",
+    "ghcr.io/njchathura-boop/bot-review-campaign-jobs:2026.08.21",
     $jobsImage
 )
 $renderedManifest = $renderedManifest.Replace(
-    "ghcr.io/njchathura-boop/bot-review-campaign-airflow:latest",
+    "ghcr.io/njchathura-boop/bot-review-campaign-airflow:56e149c",
     $airflowImage
 )
 
@@ -65,7 +65,7 @@ if ($Observability -or $Full) {
     if ($LASTEXITCODE -ne 0) { throw "Could not prepare the Kibana setup Job." }
 }
 if ($Full) {
-    & kubectl -n bot-campaign delete job detectra-airflow-migrate --ignore-not-found --wait=true
+    & kubectl -n bot-campaign delete job detectra-airflow-migrate-56e149c-v2 --ignore-not-found --wait=true
     if ($LASTEXITCODE -ne 0) { throw "Could not prepare the Airflow migration Job." }
 }
 
@@ -93,7 +93,7 @@ if (-not $SkipWait) {
         if ($LASTEXITCODE -ne 0) { throw "Kibana data-view setup did not complete." }
     }
     if ($Full) {
-        & kubectl -n bot-campaign wait --for=condition=complete job/detectra-airflow-migrate --timeout=600s
+        & kubectl -n bot-campaign wait --for=condition=complete job/detectra-airflow-migrate-56e149c-v2 --timeout=600s
         if ($LASTEXITCODE -ne 0) { throw "Airflow database migration did not complete." }
         & kubectl -n bot-campaign rollout status deployment/detectra-airflow-api --timeout=600s
         & kubectl -n bot-campaign rollout status deployment/detectra-airflow-scheduler --timeout=600s

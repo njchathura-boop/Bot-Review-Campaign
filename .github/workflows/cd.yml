@@ -170,15 +170,8 @@ jobs:
       - name: Render immutable image references
         shell: bash
         run: |
-          cp -R k8s "$RUNNER_TEMP/k8s-rendered"
-          cd "$RUNNER_TEMP/k8s-rendered/base"
-          api_image='${{ needs.publish.outputs.api_image }}'
-          jobs_image='${{ needs.publish.outputs.jobs_image }}'
-          sed -i "s|newName: ghcr.io/njchathura-boop/bot-review-campaign-api|newName: ${api_image%:*}|" kustomization.yaml
-          sed -i "s|newName: ghcr.io/njchathura-boop/bot-review-campaign-jobs|newName: ${jobs_image%:*}|" kustomization.yaml
-          sed -i "0,/newTag: latest/s//newTag: ${api_image##*:}/" kustomization.yaml
-          sed -i "0,/newTag: latest/s//newTag: ${jobs_image##*:}/" kustomization.yaml
-          kubectl kustomize . > "$RUNNER_TEMP/detectra.yaml"
+          # Render the k8s manifests using the hardcoded tags in base/kustomization.yaml
+          kubectl kustomize k8s/base > "$RUNNER_TEMP/detectra.yaml"
 
       - name: Apply manifests
         run: kubectl apply -f "$RUNNER_TEMP/detectra.yaml"

@@ -7,10 +7,7 @@ spec:
   # is moved to PostgreSQL/Redis; otherwise replicas would disagree.
   replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: detectra-api
@@ -32,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: detectra-api
+          image: ghcr.io/njchathura-boop/bot-review-campaign-api:2026.08.21-opt1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -61,7 +58,7 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: 2Gi
+              memory: 768Mi
             limits:
               cpu: "4"
               memory: 6Gi

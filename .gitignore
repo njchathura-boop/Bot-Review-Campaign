@@ -34,3 +34,6 @@ spark-warehouse/
 .runtime/
 orchestration/airflow_simple_auth_passwords.json
 k8s/secrets/*.local.yaml
+!data/**/.gitkeep
+!*.dvc
+!data/**/*.dvc

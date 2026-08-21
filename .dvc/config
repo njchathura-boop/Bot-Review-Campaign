@@ -1,4 +1,6 @@
 [core]
-    remote = local
+    remote = local_storage
 ['remote "local"']
     url = ../../bot-campaign-dvc-storage
+['remote "local_storage"']
+    url = C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\bot-campaign-dvc-storage

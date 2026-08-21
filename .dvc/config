@@ -1,6 +1,9 @@
 [core]
-    remote = local_storage
+    remote = minio_remote
 ['remote "local"']
     url = ../../bot-campaign-dvc-storage
 ['remote "local_storage"']
     url = C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\bot-campaign-dvc-storage
+['remote "minio_remote"']
+    url = s3://bot-campaign-bucket
+    endpointurl = http://localhost:9000

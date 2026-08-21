@@ -48,6 +48,10 @@ docker build --build-arg RELEASE_VERSION=$tag --build-arg SOURCE_COMMIT=$tag -f 
 docker push "$registry/bot-review-campaign-api:$tag"
 docker push "$registry/bot-review-campaign-jobs:$tag"
 docker push "$registry/bot-review-campaign-airflow:$tag"
+
+$tag = "2026.08.21"
+$registry = "ghcr.io/njchathura-boop"
+docker build --build-arg RELEASE_VERSION=$tag --build-arg SOURCE_COMMIT=$tag -f docker/ray.Dockerfile -t "$registry/bot-review-campaign-jobs:$tag" .
 ```
 
 If the GHCR packages are private, create
@@ -1225,3 +1229,350 @@ GET detectra-logs-*/_search
 For the final monitoring sequence, show Pods and PVCs, Argo Application health,
 Prometheus targets, one review request, the increase in `review_scans_total`, the API
 Grafana dashboard, a Ray view, MLflow runs, Kibana filtered logs, and API readiness.
+
+## 24. Fresh-start end-to-end procedure
+
+Use this section when opening the project tomorrow from a new terminal. It assumes the
+Docker Desktop Kubernetes cluster and persistent data may already exist. Do not delete
+the namespace or PVCs unless a full reset is intended.
+
+### Step 1: Open the project and verify tools
+
+```powershell
+Set-Location "C:\Users\njcha\Desktop\My Files\IITM\SEM3\MLOPS\Bot_Campaign_Project"
+git status
+git branch --show-current
+git pull --ff-only
+python --version
+docker version
+kubectl version --client
+kubectl config use-context docker-desktop
+kubectl get nodes
+```
+
+If `kubectl` cannot connect to `127.0.0.1:6443`, start or enable Kubernetes in Docker
+Desktop and wait until the `docker-desktop` node is `Ready`.
+
+### Step 2: Choose the release identity
+
+For a branch demonstration using the current Argo Application:
+
+```powershell
+$branch = git branch --show-current
+$tag = git rev-parse --short HEAD
+$registry = "ghcr.io/njchathura-boop"
+Write-Host "Branch: $branch"
+Write-Host "Release tag: $tag"
+```
+
+The current `deploy/argocd-application.yaml` uses `targetRevision: feature/njc`. For the
+final production-style demonstration, merge the branch into `main`, push it, and change
+the Application back to `targetRevision: main`.
+
+### Step 3: Confirm model bundles and build context
+
+The API image requires the promoted model bundles. Git LFS must materialize the real
+files rather than pointer files:
+
+```powershell
+git lfs install
+git lfs pull
+Test-Path artifacts/review_distilbert/model/model.safetensors
+Test-Path artifacts/campaign_model/model_state.pt
+Get-ChildItem artifacts/review_distilbert/model/model.safetensors,artifacts/campaign_model/model_state.pt |
+  Select-Object FullName,@{Name="MB";Expression={[math]::Round($_.Length/1MB,1)}}
+```
+
+If a model file is only a tiny Git LFS pointer, stop and run `git lfs pull` before
+building. Do not build an API image with missing promoted models.
+
+### Step 4: Login and publish project images
+
+Use a new GitHub token with package write permission. Do not paste it into this file or
+the command history. Authenticate interactively:
+
+```powershell
+docker login ghcr.io -u <github-username>
+```
+
+Build and push only the three project-owned images. The final `.` is the Docker build
+context and is required:
+
+```powershell
+docker build --pull `
+  --build-arg RELEASE_VERSION=$tag `
+  --build-arg SOURCE_COMMIT=$tag `
+  -t "$registry/bot-review-campaign-api:$tag" `
+  .
+docker build --pull `
+  --build-arg RELEASE_VERSION=$tag `
+  --build-arg SOURCE_COMMIT=$tag `
+  -f docker/ray.Dockerfile `
+  -t "$registry/bot-review-campaign-jobs:$tag" `
+  .
+docker build --pull `
+  --build-arg RELEASE_VERSION=$tag `
+  --build-arg SOURCE_COMMIT=$tag `
+  -f docker/airflow.Dockerfile `
+  -t "$registry/bot-review-campaign-airflow:$tag" `
+  .
+
+docker push "$registry/bot-review-campaign-api:$tag"
+docker push "$registry/bot-review-campaign-jobs:$tag"
+docker push "$registry/bot-review-campaign-airflow:$tag"
+```
+
+Verify the exact release manifests:
+
+```powershell
+docker manifest inspect "$registry/bot-review-campaign-api`:$tag"
+docker manifest inspect "$registry/bot-review-campaign-jobs`:$tag"
+docker manifest inspect "$registry/bot-review-campaign-airflow`:$tag"
+```
+
+MLflow, Prometheus, Grafana, Elasticsearch, Kibana, and Filebeat are pulled from their
+pinned upstream images. They are still Kubernetes Pods but do not need custom GHCR images.
+
+### Step 5: Create or apply Secrets
+
+Create the local ignored files if they do not exist:
+
+```powershell
+if (-not (Test-Path k8s/secrets/airflow-secrets.local.yaml)) {
+  Copy-Item k8s/secrets/airflow-secrets.example.yaml k8s/secrets/airflow-secrets.local.yaml
+}
+if (-not (Test-Path k8s/secrets/core-secrets.local.yaml)) {
+  Copy-Item k8s/secrets/core-secrets.example.yaml k8s/secrets/core-secrets.local.yaml
+}
+notepad k8s/secrets/airflow-secrets.local.yaml
+notepad k8s/secrets/core-secrets.local.yaml
+```
+
+Fill the required Airflow passwords/keys and Grafana password. Apply them after the
+namespace exists:
+
+```powershell
+kubectl apply -f k8s/base/namespace.yaml
+kubectl apply -f k8s/secrets/airflow-secrets.local.yaml
+kubectl apply -f k8s/secrets/core-secrets.local.yaml
+```
+
+For private GHCR packages, create the pull Secret interactively as described in section
+23.2 and attach it to the default ServiceAccount.
+
+### Step 6: Deploy the full Kubernetes stack
+
+Use the helper so the namespace, local Secrets, full overlay, image tag, and rollout
+checks are handled consistently:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\kubernetes_demo.ps1 `
+  -ImageTag $tag `
+  -Registry $registry
+```
+
+Use `-Gpu` only after the node advertises `nvidia.com/gpu: 1`. Otherwise use CPU mode.
+The direct equivalent is:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\deploy_kubernetes.ps1 `
+  -Full -ImageTag $tag -Registry $registry
+```
+
+### Step 7: Wait and diagnose the deployment
+
+```powershell
+kubectl -n bot-campaign get pods -o wide
+kubectl -n bot-campaign get svc,pvc,job,cronjob
+kubectl -n bot-campaign get events --sort-by=.lastTimestamp | Select-Object -Last 50
+```
+
+For `ImagePullBackOff`, check the GHCR tag and pull Secret. For `Pending`, inspect CPU,
+GPU, memory, and PVC events. For `CrashLoopBackOff`, inspect the previous container log:
+
+```powershell
+kubectl -n bot-campaign describe pod <pod-name>
+kubectl -n bot-campaign logs <pod-name> --all-containers --tail=200
+kubectl -n bot-campaign logs <pod-name> --all-containers --previous --tail=200
+```
+
+### Step 8: Ensure data is available
+
+The full retraining DAG needs the raw inputs on the shared workspace PVC or in the
+configured DVC remote. Verify the existing workspace before starting a large run:
+
+```powershell
+$rayPod = kubectl -n bot-campaign get pod -l app.kubernetes.io/name=detectra-ray -o jsonpath='{.items[0].metadata.name}'
+kubectl -n bot-campaign exec $rayPod -- bash -lc 'find /opt/project/data/raw -maxdepth 2 -type f | head -20'
+kubectl -n bot-campaign exec $rayPod -- bash -lc 'test -f /opt/project/data/raw/product_reviews.jsonl'
+```
+
+If using a DVC remote, confirm `detectra-storage` contains the remote configuration. If
+using local files, use the PVC loader instructions in section 5.
+
+### Step 9: Trigger complete retraining
+
+Airflow runs ETL, review training, campaign training, and MLflow registration in order.
+It is intentionally manual:
+
+```powershell
+$airflowPod = kubectl -n bot-campaign get pod -l app.kubernetes.io/name=detectra-airflow-scheduler -o jsonpath='{.items[0].metadata.name}'
+kubectl -n bot-campaign exec $airflowPod -- airflow dags trigger bot_campaign_model_retraining
+kubectl -n bot-campaign exec $airflowPod -- airflow dags list-runs -d bot_campaign_model_retraining
+kubectl -n bot-campaign logs deployment/detectra-airflow-scheduler -f
+```
+
+Watch Ray and Airflow in separate terminals:
+
+```powershell
+kubectl -n bot-campaign get pods -w
+kubectl -n bot-campaign get events --sort-by=.lastTimestamp
+```
+
+Retraining creates candidates and registers them in MLflow. It does not automatically
+replace the model bundles embedded in the API image. Review metrics before promotion.
+
+### Step 10: Start Argo CD and sync the Application
+
+If Argo CD is not already installed, use section 21. Open the UI and inspect the
+Application:
+
+```powershell
+kubectl -n argocd port-forward svc/argocd-server 8081:443
+kubectl apply -f deploy/argocd-application.yaml
+kubectl -n argocd get application bot-review-campaign -o wide
+kubectl -n argocd describe application bot-review-campaign
+```
+
+The Argo Git revision and path must match a pushed branch. The final state should be
+`Synced` and `Healthy`; the resource tree should show the project Pods.
+
+### Step 11: Open every demo endpoint
+
+Run these in separate terminals:
+
+```powershell
+kubectl -n bot-campaign port-forward svc/detectra-api 8000:8000
+kubectl -n bot-campaign port-forward svc/detectra-mlflow 5001:5000
+kubectl -n bot-campaign port-forward svc/detectra-ray 8265:8265
+kubectl -n bot-campaign port-forward svc/detectra-prometheus 9090:9090
+kubectl -n bot-campaign port-forward svc/detectra-grafana 3000:3000
+kubectl -n bot-campaign port-forward svc/detectra-kibana 5601:5601
+kubectl -n bot-campaign port-forward svc/detectra-airflow-api 8084:8080
+kubectl -n argocd port-forward svc/argocd-server 8081:443
+```
+
+Open the API/UI, MLflow, Ray, Prometheus, Grafana, Kibana, Airflow, and Argo URLs listed
+in section 22. Then run:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health/live
+Invoke-RestMethod http://localhost:8000/health/ready | ConvertTo-Json -Depth 8
+Invoke-RestMethod http://localhost:9090/-/ready
+(Invoke-RestMethod http://localhost:9090/api/v1/targets).data.activeTargets
+Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod http://localhost:5001/health
+```
+
+Use the API review and campaign examples in section 13 to create visible metrics and
+logs, then show Grafana, Prometheus, Kibana, MLflow, Ray, Airflow, and Argo evidence.
+
+### Step 12: Final demo checklist
+
+```text
+[ ] kubectl node is Ready
+[ ] project image tags exist in GHCR
+[ ] required Secrets exist in bot-campaign
+[ ] all required PVCs are Bound
+[ ] API, Ray, MLflow, Prometheus, and Grafana are Ready
+[ ] Elasticsearch, Kibana, Filebeat, Airflow, and PostgreSQL are Ready
+[ ] Argo Application is Synced / Healthy
+[ ] API /health/ready succeeds
+[ ] review score request succeeds
+[ ] campaign replay request succeeds
+[ ] Prometheus targets are healthy
+[ ] Grafana dashboard shows traffic
+[ ] MLflow shows experiments/models
+[ ] Kibana shows detectra logs
+[ ] endpoint URLs open in the browser
+```
+
+## 25. What GitHub Actions does
+
+GitHub Actions is the automated CI/CD path. It is separate from the local Docker Desktop
+commands and from Argo CD, although all three can use the same Git commit and image tags.
+
+### CI workflow: `.github/workflows/ci.yml`
+
+CI runs on pull requests and pushes to `main` or version tags. It:
+
+1. Checks out source and materializes Git LFS model bundles.
+2. Installs Python dependencies and Chromium.
+3. Runs baseline training smoke validation.
+4. Compiles Airflow DAGs.
+5. Runs Ruff and the test suite.
+6. Builds a container image without publishing it.
+7. Scans the image with Trivy.
+8. Enforces the fixed vulnerability policy.
+
+CI answers: “Is this change testable, buildable, and acceptable to merge?” It does not
+deploy the local Docker Desktop cluster.
+
+### CD workflow: `.github/workflows/cd.yml`
+
+CD runs for `v*` tags or manual `workflow_dispatch`. It:
+
+1. Checks out the selected commit with Git LFS.
+2. Verifies the promoted model bundles.
+3. Builds and pushes immutable API, jobs, and Airflow images to GHCR.
+4. Also updates each image's `latest` tag.
+5. Scans all three images with Trivy.
+6. Requires the vulnerability policy to pass.
+7. Configures Kubernetes using the encrypted `KUBE_CONFIG_DATA` GitHub secret.
+8. Renders immutable image references with Kustomize.
+9. Applies the rendered `k8s/base` manifests to the staging cluster.
+10. Waits for API, Ray, MLflow, Prometheus, and Grafana rollouts.
+11. Runs a readiness and metrics smoke test.
+12. Prints the deployed image and workload summary.
+
+CD answers: “Can this approved commit be packaged, scanned, published, and deployed to
+the configured staging cluster?” The current CD workflow deploys the core base stack;
+it does not deploy the full Airflow/Elasticsearch/Kibana overlay. It also does not create
+local Secrets from workstation files.
+
+To make CD deploy the full demo, change its render step from `k8s/base` to
+`k8s/overlays/full`, add the required staging Secrets and rollout waits, and validate the
+larger resource budget before enabling that promotion path.
+
+### Required GitHub configuration
+
+Repository Actions need package write permission, enabled workflows, and a configured
+staging Environment. The CD workflow expects:
+
+```text
+KUBE_CONFIG_DATA
+```
+
+This must be a base64-encoded kubeconfig stored as an encrypted GitHub Actions Secret.
+Never commit it or print it in logs. The staging cluster must also have the required
+runtime Secrets and access to private GHCR images.
+
+### Recommended release flow
+
+```text
+feature branch
+  -> Pull Request
+  -> CI tests, build, Trivy
+  -> merge to main
+  -> create and push v1.2.0 tag
+  -> CD builds/pushes immutable images
+  -> CD deploys configured staging cluster
+  -> Argo CD syncs Git manifests if configured
+  -> operator verifies endpoints, metrics, logs, and models
+```
+
+For a local Docker Desktop-only demo, run the manual steps in section 24. For a CI/CD
+demo, show the GitHub Actions run, GHCR package tags, Argo Application sync state, and
+the same Kubernetes endpoint checks.

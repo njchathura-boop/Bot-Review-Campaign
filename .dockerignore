@@ -14,8 +14,13 @@ artifacts/*
 !artifacts/review_distilbert/**
 !artifacts/campaign_model/
 !artifacts/campaign_model/**
-data/raw
-data/processed
+# Ignore heavy raw and processed datasets
+data/raw/*
+data/processed/*
+
+# DO NOT ignore DVC tracking files
+!data/raw.dvc
+!data/processed.dvc
 data/features
 data/checkpoints
 reports/generated

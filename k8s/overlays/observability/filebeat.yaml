@@ -128,8 +128,6 @@ spec:
             path: /var/log/pods
             type: Directory
         - name: data
-          hostPath:
-            path: /var/lib/detectra-filebeat-data
-            type: DirectoryOrCreate
+          emptyDir: {}
         - name: tmp
           emptyDir: {}

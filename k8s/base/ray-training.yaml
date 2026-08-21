@@ -4,6 +4,8 @@ metadata:
   name: detectra-ray
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: detectra-ray
@@ -27,7 +29,7 @@ spec:
       initContainers:
         - name: initialize-workspace
           image: busybox:1.36.1
-          command: [sh, -c, "mkdir -p /workspace/data /workspace/artifacts /workspace/reports"]
+          command: [sh, -c, "mkdir -p /workspace/data /workspace/artifacts /workspace/reports && chown -R 1000:100 /workspace"]
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
@@ -36,7 +38,7 @@ spec:
               mountPath: /workspace
       containers:
         - name: ray
-          image: detectra-jobs
+          image: ghcr.io/njchathura-boop/bot-review-campaign-jobs:2026.08.21
           imagePullPolicy: IfNotPresent
           command: [ray]
           args:
@@ -75,40 +77,28 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: "2"
-              memory: 4Gi
+              cpu: "1"
+              memory: 1Gi
             limits:
-              cpu: "8"
-              memory: 12Gi
+              cpu: "4"
+              memory: 8Gi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
           volumeMounts:
-            - name: data
+            - name: workspace
               mountPath: /opt/project/data
               subPath: data
-            - name: artifacts
+            - name: workspace
               mountPath: /opt/project/artifacts
               subPath: artifacts
-            - name: reports
-              mountPath: /opt/project/reports/generated
-              subPath: reports
             - name: ray-tmp
               mountPath: /tmp/ray
             - name: dshm
               mountPath: /dev/shm
       volumes:
         - name: workspace
-          persistentVolumeClaim:
-            claimName: detectra-workspace
-        - name: data
-          persistentVolumeClaim:
-            claimName: detectra-workspace
-        - name: artifacts
-          persistentVolumeClaim:
-            claimName: detectra-workspace
-        - name: reports
           persistentVolumeClaim:
             claimName: detectra-workspace
         - name: ray-tmp

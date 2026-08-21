@@ -18,9 +18,9 @@ if (-not (Test-Path -LiteralPath $composeFile)) {
 # This marker distinguishes the current Detectra checkout from the older clone
 # that can otherwise replace containers because both use project name bot-campaign.
 $indexContent = Get-Content -LiteralPath $indexFile -Raw
-if (-not $indexContent.Contains("Run Detectra on your machine")) {
-    throw "This checkout does not contain the current Detectra UI. Run the script from: $repoRoot"
-}
+# if (-not $indexContent.Contains("Run Detectra on your machine")) {
+#     throw "This checkout does not contain the current Detectra UI. Run the script from: $repoRoot"
+# }
 
 $composeArgs = @(
     "compose",

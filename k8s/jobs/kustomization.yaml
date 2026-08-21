@@ -9,4 +9,4 @@ resources:
 images:
   - name: detectra-jobs
     newName: ghcr.io/njchathura-boop/bot-review-campaign-jobs
-    newTag: latest
+    newTag: 2026.08.21

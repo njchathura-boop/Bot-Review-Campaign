@@ -30,7 +30,7 @@ COPY src ./src
 RUN python -m pip install --no-cache-dir --no-compile \
             --index-url https://download.pytorch.org/whl/cpu \
             "torch>=2.4,<3" && \
-        python -m pip install --no-cache-dir --no-compile ".[nlp,streaming]" && \
+        python -m pip install --no-cache-dir --no-compile --no-build-isolation ".[nlp,streaming]" && \
         python -m pip install --no-cache-dir --no-compile --upgrade \
             "jaraco.context>=6.1.0" \
             "wheel>=0.46.2"

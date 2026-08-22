@@ -10,6 +10,8 @@ description = "Fake-review classification and coordinated campaign detection"
 # currently stop at Python 3.12. Keep local, CI, Docker, and Ray workers compatible.
 requires-python = ">=3.11,<3.13"
 dependencies = [
+  "jaraco.context>=6.1.0",
+  "wheel>=0.46.2",
   "fastapi>=0.115,<1",
   "joblib>=1.4,<2",
   "numpy>=1.26,<3",

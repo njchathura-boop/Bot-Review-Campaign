@@ -20,6 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 RUN apt-get update \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app
@@ -29,7 +30,10 @@ COPY src ./src
 RUN python -m pip install --no-cache-dir --no-compile \
             --index-url https://download.pytorch.org/whl/cpu \
             "torch>=2.4,<3" && \
-        python -m pip install --no-cache-dir --no-compile ".[nlp,streaming]"
+        python -m pip install --no-cache-dir --no-compile ".[nlp,streaming]" && \
+        python -m pip install --no-cache-dir --no-compile --upgrade \
+            "jaraco.context>=6.1.0" \
+            "wheel>=0.46.2"
 COPY web ./web
 COPY artifacts/review_distilbert /models/review_distilbert
 COPY artifacts/campaign_model /models/campaign_model

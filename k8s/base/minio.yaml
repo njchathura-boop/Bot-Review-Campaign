@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: bot-campaign
+
+spec:
+  replicas: 1
+
+  # Better for a ReadWriteOnce PVC.
+  # Prevents old + new MinIO pods trying to mount same volume during update.
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: minio
+
+  template:
+    metadata:
+      labels:
+        app: minio
+
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          imagePullPolicy: IfNotPresent
+
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+
+          env:
+            - name: minioadmin
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-minio
+                  key: minioadmin
+
+            - name: minioadmin
+              valueFrom:
+                secretKeyRef:
+                  name: detectra-minio
+                  key: minioadmin
+
+          ports:
+            - containerPort: 9000
+              name: api
+
+            - containerPort: 9001
+              name: console
+
+          # THIS IS THE IMPORTANT PART
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+
+      # THIS CONNECTS MINIO TO YOUR EXISTING 500 GiB PVC
+      volumes:
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: minio
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: bot-campaign
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: minio
+
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+
+    - name: console
+      port: 9001
+      targetPort: 9001
+      protocol: TCP

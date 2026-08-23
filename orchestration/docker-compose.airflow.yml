@@ -20,6 +20,10 @@ x-airflow-common: &airflow-common
     BOT_CAMPAIGN_RAY_JOBS_URL: http://host.docker.internal:8265
     BOT_CAMPAIGN_GPUS_PER_TRIAL: ${BOT_CAMPAIGN_GPUS_PER_TRIAL:-0}
     BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS: ${BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS:-1}
+    # Deliberate quick-run defaults. Set these before triggering the DAG for
+    # a larger retraining run (for example 10 trials x 20 epochs).
+    BOT_CAMPAIGN_NUM_SAMPLES: ${BOT_CAMPAIGN_NUM_SAMPLES:-1}
+    BOT_CAMPAIGN_EPOCHS: ${BOT_CAMPAIGN_EPOCHS:-1}
     BOT_CAMPAIGN_MLFLOW_URI: ${BOT_CAMPAIGN_MLFLOW_URI:-http://mlflow:5000}
     BOT_CAMPAIGN_API_URL: http://host.docker.internal:8000
   volumes:

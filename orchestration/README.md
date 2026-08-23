@@ -32,6 +32,13 @@ DVC remote is configured, the job restores `data/raw.dvc` first and pushes succe
 outputs. This keeps Airflow as the workflow orchestrator without duplicating ETL settings
 inside the DAG.
 
+The DAG limits normal scheduling to one active run and also takes an OS-level `flock`
+around the DVC pull/repro/push block. This matters because the Ray workspace is a shared
+volume: an Airflow restart can leave an older Ray submission alive even though Airflow no
+longer displays that run as active. A second DVC writer must wait for the first one rather
+than corrupting `data/raw` or `data/processed`. If a job is genuinely abandoned, inspect
+Ray Jobs and stop that submission before retrying; do not delete a live DVC lock file.
+
 It defaults to manual triggering because full DistilBERT training is expensive. Set a
 cron only after a full manual run passes acceptance checks. The DAG registers model
 versions but deliberately does not promote or deploy them automatically.

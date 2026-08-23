@@ -47,6 +47,9 @@ spec:
                   if [[ -n "${DVC_REMOTE_URL:-}" ]]; then
                     dvc remote add --local --force "${DVC_REMOTE_NAME:-kubernetes}" "$DVC_REMOTE_URL"
                     dvc remote default "${DVC_REMOTE_NAME:-kubernetes}"
+                    if [[ -n "${DVC_ENDPOINT_URL:-}" ]]; then
+                      dvc remote modify --local "${DVC_REMOTE_NAME:-kubernetes}" endpointurl "$DVC_ENDPOINT_URL"
+                    fi
                     dvc pull data/raw.dvc
                   fi
                   test -f data/raw/product_reviews.jsonl || {

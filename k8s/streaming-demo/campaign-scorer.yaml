@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-campaign-scorer
+  namespace: bot-campaign
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: detectra-campaign-scorer
+  template:
+    metadata:
+      labels:
+        app: detectra-campaign-scorer
+    spec:
+      containers:
+        - name: scorer
+          image: ghcr.io/njchathura-boop/bot-review-campaign-jobs:2026.08.21
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/opt/project/streaming/campaign_scorer.py"]
+          args:
+            - --bundle
+            - /opt/project/artifacts/candidates/campaign_model
+            - --bootstrap-servers
+            - kafka:29092
+            - --input-topic
+            - reviews.analysis-windows.v1
+            - --output-topic
+            - reviews.campaign-scores.v1
+            - --dead-letter-topic
+            - reviews.campaign-scores.dlq.v1
+          env:
+            - {name: PYTHONPATH, value: /opt/project/src}
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits: {cpu: "1", memory: "2Gi"}
+          volumeMounts:
+            - {name: workspace, mountPath: /opt/project/artifacts, subPath: artifacts}
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: detectra-workspace

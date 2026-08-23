@@ -71,7 +71,7 @@ python -m bot_campaign.cli generate-campaign-splits `
   --profile data/processed/temporal_bundle/behavior/profile.json `
   --products data/processed/temporal_bundle/behavior/products.jsonl `
   --output-dir data/processed/temporal_bundle/campaign_v3 `
-  --count 816216 `
+  --count 100000 `
   --seed 42
 ```
 

@@ -20,6 +20,8 @@ RAY_JOBS_URL = os.getenv(
 RETRAIN_CRON = os.getenv("BOT_CAMPAIGN_RETRAIN_CRON") or None
 GPUS_PER_TRIAL = os.getenv("BOT_CAMPAIGN_GPUS_PER_TRIAL", "0")
 MAX_CONCURRENT_TRIALS = os.getenv("BOT_CAMPAIGN_MAX_CONCURRENT_TRIALS", "1")
+NUM_SAMPLES = os.getenv("BOT_CAMPAIGN_NUM_SAMPLES", "1")
+EPOCHS = os.getenv("BOT_CAMPAIGN_EPOCHS", "1")
 PROJECT_ROOT = "/opt/project"
 MLFLOW_URI = os.getenv("BOT_CAMPAIGN_MLFLOW_URI", "http://mlflow:5000").rstrip("/")
 
@@ -63,6 +65,10 @@ def _entrypoint(
         f"{PROJECT_ROOT}/{test_data}",
         "--output",
         f"{PROJECT_ROOT}/{output}",
+        "--num-samples",
+        NUM_SAMPLES,
+        "--epochs",
+        EPOCHS,
         "--gpus-per-trial",
         GPUS_PER_TRIAL,
         "--max-concurrent-trials",
@@ -79,18 +85,31 @@ def _data_entrypoint() -> str:
     Kubernetes storage secret is inherited by the Ray job and restores/pushes
     versioned objects when a shared DVC remote is configured.
     """
-    return " && ".join(
-        [
-            f"cd {shlex.quote(PROJECT_ROOT)}",
-            "if [ -n \"${DVC_REMOTE_URL:-}\" ]; then "
-            "dvc remote add --local --force \"${DVC_REMOTE_NAME:-kubernetes}\" "
-            "\"$DVC_REMOTE_URL\" && "
-            "dvc remote default \"${DVC_REMOTE_NAME:-kubernetes}\" && "
-            "dvc pull data/raw.dvc; fi",
-            "test -f data/raw/product_reviews.jsonl",
-            "dvc repro build_temporal_bundle build_dataset_bundle",
-            "if [ -n \"${DVC_REMOTE_URL:-}\" ]; then dvc push; fi",
-        ]
+    # Airflow's max_active_runs protects normal DAG scheduling, but an older Ray
+    # submission can outlive an Airflow restart. DVC uses a workspace lock and
+    # correctly rejects a second writer; serialize the whole pull/repro/push block
+    # so a second submission waits instead of racing the shared /opt/project volume.
+    dvc_commands = [
+        "cd " + shlex.quote(PROJECT_ROOT),
+        "if [ -n \"${DVC_REMOTE_URL:-}\" ]; then "
+        "dvc remote add --local --force \"${DVC_REMOTE_NAME:-kubernetes}\" "
+        "\"$DVC_REMOTE_URL\" && "
+        "dvc remote default \"${DVC_REMOTE_NAME:-kubernetes}\" && "
+        "{ [ -z \"${DVC_ENDPOINT_URL:-}\" ] || "
+        "dvc remote modify --local \"${DVC_REMOTE_NAME:-kubernetes}\" "
+        "endpointurl \"$DVC_ENDPOINT_URL\"; } && "
+        "dvc pull data/raw.dvc; fi",
+        "test -f data/raw/product_reviews.jsonl",
+        "dvc repro build_temporal_bundle build_dataset_bundle",
+        "if [ -n \"${DVC_REMOTE_URL:-}\" ]; then dvc push; fi",
+    ]
+    locked_commands = " && ".join(dvc_commands)
+    return (
+        f"mkdir -p {PROJECT_ROOT}/.dvc/locks && "
+        "command -v flock >/dev/null 2>&1 || "
+        "{ echo 'flock is required to serialize Airflow DVC jobs' >&2; exit 1; } && "
+        f"flock --wait 3600 {PROJECT_ROOT}/.dvc/locks/etl.lock "
+        f"bash -lc {shlex.quote(locked_commands)}"
     )
 
 

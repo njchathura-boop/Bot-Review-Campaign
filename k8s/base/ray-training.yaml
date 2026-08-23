@@ -57,6 +57,15 @@ spec:
           env:
             - name: MLFLOW_TRACKING_URI
               value: http://detectra-mlflow:5000
+            # --- MinIO & S3 / DVC Credentials ---
+            - name: AWS_ACCESS_KEY_ID
+              value: "minioadmin"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "minioadmin"
+            - name: AWS_ENDPOINT_URL
+              value: "http://minio.bot-campaign.svc.cluster.local:9000"
+            - name: AWS_ENDPOINT_URL_S3
+              value: "http://minio.bot-campaign.svc.cluster.local:9000"
           ports:
             - name: dashboard
               containerPort: 8265
@@ -90,11 +99,14 @@ spec:
             - name: workspace
               mountPath: /opt/project/data
               subPath: data
+
             - name: workspace
               mountPath: /opt/project/artifacts
               subPath: artifacts
+
             - name: ray-tmp
               mountPath: /tmp/ray
+
             - name: dshm
               mountPath: /dev/shm
       volumes:

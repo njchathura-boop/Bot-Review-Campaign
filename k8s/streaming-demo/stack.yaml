@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:4.1.0
+          ports:
+            - {name: kafka, containerPort: 29092}
+            - {name: controller, containerPort: 29093}
+          env:
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@kafka:29093"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093"}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka:29092"}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER"}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT"}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "true"}
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits: {cpu: "1", memory: "1Gi"}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  selector:
+    app: kafka
+  ports:
+    - {name: kafka, port: 29092, targetPort: 29092}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: apache/kafka:4.1.0
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -e
+              until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do sleep 5; done
+              for topic in reviews.raw.v1 reviews.analysis-windows.v1 reviews.campaign-scores.v1 reviews.campaign-scores.dlq.v1; do
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$topic" --partitions 3 --replication-factor 1
+              done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-spark
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: detectra-spark
+  template:
+    metadata:
+      labels:
+        app: detectra-spark
+    spec:
+      containers:
+        - name: spark
+          image: apache/spark:4.0.1-scala2.13-java17-python3-ubuntu
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              exec /opt/spark/bin/spark-submit                 --master 'local[2]'                 --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1                 /opt/project/spark/review_stream.py                 --bootstrap-servers kafka:29092                 --input-topic reviews.raw.v1                 --output-topic reviews.analysis-windows.v1                 --checkpoint /opt/project/data/checkpoints/analysis-windows-v1
+          resources:
+            requests: {cpu: "1", memory: "2Gi"}
+            limits: {cpu: "2", memory: "4Gi"}
+          volumeMounts:
+            - {name: spark-code, mountPath: /opt/project/spark/review_stream.py, subPath: review_stream.py, readOnly: true}
+            - {name: checkpoints, mountPath: /opt/project/data/checkpoints}
+      volumes:
+        - name: spark-code
+          configMap:
+            name: detectra-spark-code
+        - name: checkpoints
+          emptyDir: {}

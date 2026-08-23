@@ -1,7 +1,7 @@
 name: bot-campaign
 
 x-ray-runtime: &ray-runtime
-  image: bot-campaign-ray:local
+  image: ghcr.io/njchathura-boop/bot-review-campaign-jobs:2026.08.21
   build:
     context: .
     dockerfile: docker/ray.Dockerfile
@@ -296,8 +296,12 @@ services:
       - /opt/project/data/processed/temporal_bundle/campaign/test.jsonl
       - --output
       - /opt/project/artifacts/campaign_model
+      - --num-samples
+      - ${RAY_NUM_SAMPLES:-1}
+      - --epochs
+      - ${RAY_EPOCHS:-1}
       - --gpus-per-trial
-      - ${RAY_GPUS_PER_TRIAL:-0}
+      - ${RAY_GPUS_PER_TRIAL:-1}
       - --max-concurrent-trials
       - ${RAY_MAX_CONCURRENT_TRIALS:-1}
     depends_on:
@@ -334,7 +338,10 @@ services:
       - /opt/project/data/processed/dataset_bundle/text/real/test.jsonl
       - --output
       - /opt/project/artifacts/review_distilbert
-      - --smoke
+      - --num-samples
+      - ${RAY_NUM_SAMPLES:-1}
+      - --epochs
+      - ${RAY_EPOCHS:-1}
       - --gpus-per-trial
       - ${RAY_GPUS_PER_TRIAL:-0}
       - --max-concurrent-trials

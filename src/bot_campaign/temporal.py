@@ -95,20 +95,22 @@ def _launch_phase(hours_since_launch: float) -> str:
 
 def _add_temporal_features(rows: list[dict], event_role: str) -> list[dict]:
     """Calculate features using only events preceding each review in event time."""
-    normalized: list[tuple[Review, dict]] = []
-    for row in rows:
-        review = Review.model_validate(canonicalize_review_event(row))
-        if review.launch_time is None:
-            raise ValueError(f"Review {review.review_id} has no launch_time")
-        normalized.append((review, row))
-    normalized.sort(key=lambda item: (item[0].timestamp, item[0].review_id))
+    # Enrich the existing dictionaries in place. The previous implementation kept
+    # (Review, original-row) tuples and then allocated a second feature_rows list;
+    # on the full temporal bundle that duplicated hundreds of thousands of records
+    # and caused Ray's memory monitor to kill the ETL worker. Sorting the compact
+    # source rows and updating each one preserves the event-time semantics without
+    # retaining a second copy of the dataset.
+    rows.sort(key=lambda row: (normalize_timestamp(row["timestamp"]), row["review_id"]))
 
     product_last: dict[str, datetime] = {}
     user_last: dict[str, datetime] = {}
     product_hour: dict[str, deque[datetime]] = defaultdict(deque)
     user_day: dict[str, deque[datetime]] = defaultdict(deque)
-    feature_rows: list[dict] = []
-    for review, original in normalized:
+    for original in rows:
+        review = Review.model_validate(canonicalize_review_event(original))
+        if review.launch_time is None:
+            raise ValueError(f"Review {review.review_id} has no launch_time")
         product_queue = product_hour[review.product_id]
         user_queue = user_day[review.user_id]
         while product_queue and review.timestamp - product_queue[0] > timedelta(hours=1):
@@ -118,8 +120,8 @@ def _add_temporal_features(rows: list[dict], event_role: str) -> list[dict]:
 
         launch = review.launch_time
         hours_since_launch = (review.timestamp - launch).total_seconds() / 3600
-        row = {**original, **review.model_dump(mode="json")}
-        row.update(
+        original.update(review.model_dump(mode="json"))
+        original.update(
             hours_since_launch=round(hours_since_launch, 6),
             launch_phase=_launch_phase(hours_since_launch),
             is_pre_launch_review=hours_since_launch < 0,
@@ -141,12 +143,11 @@ def _add_temporal_features(rows: list[dict], event_role: str) -> list[dict]:
             temporal_feature_version=TEMPORAL_FEATURE_VERSION,
             event_role=event_role,
         )
-        feature_rows.append(row)
         product_queue.append(review.timestamp)
         user_queue.append(review.timestamp)
         product_last[review.product_id] = review.timestamp
         user_last[review.user_id] = review.timestamp
-    return feature_rows
+    return rows
 
 
 def _profile(rows: list[dict]) -> dict:

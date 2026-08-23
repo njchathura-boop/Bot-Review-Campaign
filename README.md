@@ -789,3 +789,4 @@ submission.
 - [ ] Ensure Git LFS models and DVC metadata are evaluator-accessible.
 - [ ] Run tests and confirm GitHub Actions are green.
 - [ ] Submit the GitHub link, title, team details and PDF report.
+

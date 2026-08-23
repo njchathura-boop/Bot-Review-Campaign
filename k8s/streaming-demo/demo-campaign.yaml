@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coordinated-campaign-demo
+  namespace: bot-campaign
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: demo
+          image: apache/kafka:4.1.0
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -e
+              until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe --topic reviews.raw.v1 >/dev/null 2>&1; do sleep 5; done
+              TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              cat <<EOF | /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:29092 --topic reviews.raw.v1
+              {"review_id":"attack-001","user_id":"bot-user-01","product_id":"product-attack-A","text":"excellent premium durable trusted amazing item","rating":5,"timestamp":"${TS}","schema_version":"reviews.raw.v1"}
+              {"review_id":"attack-002","user_id":"bot-user-02","product_id":"product-attack-A","text":"excellent premium durable trusted amazing item","rating":5,"timestamp":"${TS}","schema_version":"reviews.raw.v1"}
+              {"review_id":"attack-003","user_id":"bot-user-03","product_id":"product-attack-A","text":"excellent premium durable trusted amazing item","rating":5,"timestamp":"${TS}","schema_version":"reviews.raw.v1"}
+              {"review_id":"attack-004","user_id":"bot-user-04","product_id":"product-attack-A","text":"excellent premium durable trusted amazing item","rating":5,"timestamp":"${TS}","schema_version":"reviews.raw.v1"}
+              {"review_id":"attack-005","user_id":"bot-user-05","product_id":"product-attack-B","text":"excellent premium durable trusted amazing item","rating":5,"timestamp":"${TS}","schema_version":"reviews.raw.v1"}
+              {"review_id":"attack-006","user_id":"bot-user-06","product_id":"product-attack-B","text":"excellent premium durable trusted amazing item","rating":5,"timestamp":"${TS}","schema_version":"reviews.raw.v1"}
+              EOF
+              echo "Injected 6 coordinated reviews."
+              sleep 45
+              echo "=== Spark coordinated windows ==="
+              /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka:29092 --topic reviews.analysis-windows.v1 --from-beginning --timeout-ms 30000 --max-messages 12 || true

@@ -37,7 +37,8 @@ stages:
       data/raw/amazon_toys_and_games.jsonl
       data/raw/amazon_video_games.jsonl
       --output-dir data/processed/temporal_bundle
-      --campaign-scenario-count 816216
+      # Bounded laptop profile: the generator currently materializes rows in memory.
+      --campaign-scenario-count 100000
       --seed 42
     deps:
       - data/raw/amazon_all_beauty.jsonl
@@ -120,7 +121,8 @@ stages:
       data/raw/amazon_video_games.jsonl
       --output-dir data/processed/dataset_bundle
       --augmentation-count 7000
-      --campaign-scenario-count 816216
+      # Keep both generated bundles on the same bounded scenario scale.
+      --campaign-scenario-count 100000
       --max-synthetic-fraction 0.25
       --seed 42
     deps:

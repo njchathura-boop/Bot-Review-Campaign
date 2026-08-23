@@ -16,11 +16,10 @@ Complete the missing team values before final submission.
 | Field | Value |
 |---|---|
 | Course | DA5402W — MLOps |
-| Repository name | `DA5402W_project_<team-id>_<roll-number>` |
+| Repository name | `DA5402W_project_28_DA25M558_DA25M584_DA25M572` |
 | Evaluation branch | `main` |
 | Team ID | 28 |
-| Team members and roll numbers | Chathura N J (DA25M558), Likitha (DA25M584),
-Karthik(DA25M572) |
+| Team members and roll numbers | Chathura N J (DA25M558), Likitha (DA25M584),Karthik(DA25M572) |
 | GitHub evaluator | `mlopslabsubmission-2026` |
 | Final report | `reports/Detectra_Report.pdf` |
 

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bot-review-campaign
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/njchathura-boop/Bot-Review-Campaign.git
+    targetRevision: feature/njc
+    path: k8s/overlays/full
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: bot-campaign
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

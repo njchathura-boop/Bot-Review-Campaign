@@ -1,0 +1,2 @@
+artifacts/review_distilbert/** filter=lfs diff=lfs merge=lfs -text
+artifacts/campaign_model/** filter=lfs diff=lfs merge=lfs -text

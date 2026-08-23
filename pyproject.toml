@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bot-campaign-detector"
+version = "1.1.0"
+description = "Fake-review classification and coordinated campaign detection"
+# The complete Windows MLOps stack includes Ray, whose official Windows wheels
+# currently stop at Python 3.12. Keep local, CI, Docker, and Ray workers compatible.
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "jaraco.context>=6.1.0",
+  "wheel>=0.46.2",
+  "fastapi>=0.115,<1",
+  "joblib>=1.4,<2",
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "pydantic>=2.9,<3",
+  "scikit-learn>=1.5,<2",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.27,<1", "pytest>=8,<9", "ruff==0.8.6"]
+mlops = ["dvc[s3]>=3.56,<4", "mlflow>=2.18,<4"]
+streaming = ["confluent-kafka>=2.6,<4"]
+nlp = ["torch>=2.4,<3", "transformers>=4.46,<6"]
+distributed = ["ray[default]>=2.40,<3", "mlflow>=3,<4"]
+campaign-training = [
+  "torch>=2.4,<3",
+  "transformers>=4.46,<6",
+  "ray[default]>=2.40,<3",
+  "mlflow>=3,<4",
+]
+ui = ["playwright>=1.50,<2"]
+
+[project.scripts]
+bot-campaign = "bot_campaign.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

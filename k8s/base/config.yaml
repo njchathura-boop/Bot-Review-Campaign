@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: detectra-config
+data:
+  APP_ENV: kubernetes
+  DATASET_VERSION: dvc-managed
+  FEATURE_VERSION: feature-set-v2
+  DEPLOYMENT_REVISION: kubernetes-kustomize
+  REVIEW_TRANSFORMER_PATH: /models/review_distilbert
+  CAMPAIGN_MODEL_PATH: /models/campaign_model
+  CAMPAIGN_ALERTS_ENABLED: "false"
+  MLFLOW_URL: http://localhost:5001
+  MLFLOW_HEALTH_URL: http://detectra-mlflow:5000/health
+  PROMETHEUS_URL: http://localhost:9090
+  PROMETHEUS_HEALTH_URL: http://detectra-prometheus:9090/-/ready
+  GRAFANA_URL: http://localhost:3000
+  GRAFANA_HEALTH_URL: http://detectra-grafana:3000/api/health
+  RAY_DASHBOARD_URL: http://localhost:8265
+  RAY_DASHBOARD_HEALTH_URL: http://detectra-ray:8265/api/jobs/
+  KIBANA_URL: ""
+  KIBANA_HEALTH_URL: ""
+  RAY_GPUS_PER_TRIAL: "0"
+  RAY_MAX_CONCURRENT_TRIALS: "1"
+  DVC_REMOTE_NAME: kubernetes

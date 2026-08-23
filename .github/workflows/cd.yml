@@ -1,0 +1,200 @@
+name: cd
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: "Git SHA to package (defaults to the selected ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/njchathura-boop/bot-review-campaign-api
+  JOBS_IMAGE: ghcr.io/njchathura-boop/bot-review-campaign-jobs
+  AIRFLOW_IMAGE: ghcr.io/njchathura-boop/bot-review-campaign-airflow
+
+jobs:
+  publish:
+    name: Build, scan, and publish immutable images
+    runs-on: ubuntu-latest
+    outputs:
+      api_image: ${{ steps.identity.outputs.api_image }}
+      jobs_image: ${{ steps.identity.outputs.jobs_image }}
+      airflow_image: ${{ steps.identity.outputs.airflow_image }}
+      sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.image_sha || github.sha }}
+          lfs: true
+
+      - name: Resolve immutable image identity
+        id: identity
+        shell: bash
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "api_image=${API_IMAGE}:$sha" >> "$GITHUB_OUTPUT"
+          echo "jobs_image=${JOBS_IMAGE}:$sha" >> "$GITHUB_OUTPUT"
+          echo "airflow_image=${AIRFLOW_IMAGE}:$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Verify promoted Git LFS model bundles
+        shell: bash
+        run: |
+          test "$(stat -c%s artifacts/review_distilbert/model/model.safetensors)" -gt 100000000
+          test "$(stat -c%s artifacts/campaign_model/model_state.pt)" -gt 100000000
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API/UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          build-args: |
+            RELEASE_VERSION=${{ github.ref_name }}
+            SOURCE_COMMIT=${{ steps.identity.outputs.sha }}
+          tags: |
+            ${{ steps.identity.outputs.api_image }}
+            ${{ env.API_IMAGE }}:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build and push ETL/training jobs image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ray.Dockerfile
+          push: true
+          build-args: |
+            RELEASE_VERSION=${{ github.ref_name }}
+            SOURCE_COMMIT=${{ steps.identity.outputs.sha }}
+          tags: |
+            ${{ steps.identity.outputs.jobs_image }}
+            ${{ env.JOBS_IMAGE }}:latest
+          cache-from: type=gha,scope=jobs
+          cache-to: type=gha,mode=max,scope=jobs
+
+      - name: Build and push Airflow orchestration image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/airflow.Dockerfile
+          push: true
+          build-args: |
+            RELEASE_VERSION=${{ github.ref_name }}
+            SOURCE_COMMIT=${{ steps.identity.outputs.sha }}
+          tags: |
+            ${{ steps.identity.outputs.airflow_image }}
+            ${{ env.AIRFLOW_IMAGE }}:latest
+          cache-from: type=gha,scope=airflow
+          cache-to: type=gha,mode=max,scope=airflow
+
+      - name: Scan API/UI image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.identity.outputs.api_image }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: json
+          output: trivy-api.json
+          exit-code: "0"
+
+      - name: Enforce API/UI vulnerability policy
+        run: python scripts/enforce_trivy.py trivy-api.json
+
+      - name: Scan ETL/training image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.identity.outputs.jobs_image }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: json
+          output: trivy-jobs.json
+          exit-code: "0"
+
+      - name: Enforce ETL/training vulnerability policy
+        run: python scripts/enforce_trivy.py trivy-jobs.json
+
+      - name: Scan Airflow orchestration image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.identity.outputs.airflow_image }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          format: json
+          output: trivy-airflow.json
+          exit-code: "0"
+
+      - name: Enforce Airflow vulnerability policy
+        run: python scripts/enforce_trivy.py trivy-airflow.json
+
+  deploy-staging:
+    name: Deploy staging and smoke test
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubernetes access
+        shell: bash
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        run: |
+          test -n "$KUBE_CONFIG_DATA" || { echo "Missing KUBE_CONFIG_DATA staging secret"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/kube"
+          echo "$KUBE_CONFIG_DATA" | base64 --decode > "$RUNNER_TEMP/kube/config"
+          echo "KUBECONFIG=$RUNNER_TEMP/kube/config" >> "$GITHUB_ENV"
+
+      - name: Render immutable image references
+        shell: bash
+        run: |
+          # Render the k8s manifests using the hardcoded tags in base/kustomization.yaml
+          kubectl kustomize k8s/base > "$RUNNER_TEMP/detectra.yaml"
+
+      - name: Apply manifests
+        run: kubectl apply -f "$RUNNER_TEMP/detectra.yaml"
+
+      - name: Wait for core rollouts
+        shell: bash
+        run: |
+          kubectl -n bot-campaign rollout status deployment/detectra-api --timeout=600s
+          kubectl -n bot-campaign rollout status deployment/detectra-ray --timeout=600s
+          kubectl -n bot-campaign rollout status deployment/detectra-mlflow --timeout=300s
+          kubectl -n bot-campaign rollout status deployment/detectra-prometheus --timeout=300s
+          kubectl -n bot-campaign rollout status deployment/detectra-grafana --timeout=300s
+
+      - name: Smoke test readiness and metrics
+        shell: bash
+        run: |
+          kubectl -n bot-campaign run cd-smoke-${GITHUB_RUN_ID} --rm -i --restart=Never \
+            --image=curlimages/curl:8.10.1 -- \
+            sh -ec 'curl -fsS http://detectra-api:8000/health/ready && curl -fsS http://detectra-api:8000/metrics | grep review_scans_total'
+
+      - name: Record deployment summary
+        run: |
+          echo "API:  ${{ needs.publish.outputs.api_image }}"
+          echo "Jobs: ${{ needs.publish.outputs.jobs_image }}"
+          echo "Airflow: ${{ needs.publish.outputs.airflow_image }}"
+          kubectl -n bot-campaign get pods,services,cronjobs

@@ -1,0 +1,35 @@
+# Local development log pipeline: Docker container logs -> Elasticsearch -> Kibana.
+# The Docker log-file input is more reliable than Docker autodiscover on Docker Desktop.
+filebeat.inputs:
+  - type: filestream
+    id: docker-json-logs
+    parsers:
+      - container: ~
+    paths:
+      - /var/lib/docker/containers/*/*-json.log
+
+processors:
+  - add_docker_metadata:
+      host: unix:///var/run/docker.sock
+  # Other local Docker projects may exist on this computer. Read their file metadata only
+  # long enough to identify it, then drop it before it can leave this Filebeat container.
+  - drop_event:
+      when:
+        or:
+          - not:
+              contains:
+                container.name: bot-campaign
+          - contains:
+              container.name: filebeat
+  - add_fields:
+      target: app
+      fields:
+        name: bot-campaign-detector
+        environment: local-compose
+
+# Grafana owns the prebuilt metric dashboards in this project.  Do not block
+# Filebeat startup trying to import Elastic's unrelated sample dashboards.
+setup.dashboards.enabled: false
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]

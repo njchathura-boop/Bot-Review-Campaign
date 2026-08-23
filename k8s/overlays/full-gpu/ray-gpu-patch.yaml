@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: detectra-ray
+spec:
+  template:
+    spec:
+      containers:
+        - name: ray
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+              nvidia.com/gpu: "1"   
+            limits:
+              cpu: "4"
+              memory: "6Gi"
+              nvidia.com/gpu: "1"  

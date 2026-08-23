@@ -1,0 +1,26 @@
+.git
+.agents
+.pytest_cache
+.pytest-tmp
+.ruff_cache
+**/__pycache__
+**/*.pyc
+src/*.egg-info
+# The release API image carries only the two promoted, Git-LFS-versioned model
+# bundles. Training checkpoints and generated artifacts never enter the build
+# context.
+artifacts/*
+!artifacts/review_distilbert/
+!artifacts/review_distilbert/**
+!artifacts/campaign_model/
+!artifacts/campaign_model/**
+# Ignore heavy raw and processed datasets
+data/raw/*
+data/processed/*
+
+# DO NOT ignore DVC tracking files
+!data/raw.dvc
+!data/processed.dvc
+data/features
+data/checkpoints
+reports/generated

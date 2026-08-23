@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bot-campaign
+
+resources:
+  - review-training-job.yaml
+
+images:
+  - name: detectra-jobs
+    newName: ghcr.io/njchathura-boop/bot-review-campaign-jobs
+    newTag: 2026.08.21

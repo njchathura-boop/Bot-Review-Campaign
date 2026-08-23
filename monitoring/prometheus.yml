@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: bot-campaign-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+
+  # Explicit ports make Ray targets stable across container restarts. Each
+  # container has its own network namespace, so both may expose port 8080.
+  - job_name: ray
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ray-head:8080"]
+        labels:
+          ray_role: head
+      - targets: ["ray-worker:8080"]
+        labels:
+          ray_role: worker

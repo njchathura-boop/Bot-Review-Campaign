@@ -1,0 +1,184 @@
+stages:
+  build_temporal_bundle:
+    cmd: >-
+      python -m bot_campaign.cli build-temporal-bundle
+      --behavioral-input
+      data/raw/amazon_all_beauty.jsonl
+      data/raw/amazon_amazon_fashion.jsonl
+      data/raw/amazon_appliances.jsonl
+      data/raw/amazon_arts_crafts_and_sewing.jsonl
+      data/raw/amazon_automotive.jsonl
+      data/raw/amazon_baby_products.jsonl
+      data/raw/amazon_beauty_and_personal_care.jsonl
+      data/raw/amazon_books.jsonl
+      data/raw/amazon_cds_and_vinyl.jsonl
+      data/raw/amazon_cell_phones_and_accessories.jsonl
+      data/raw/amazon_clothing_shoes_and_jewelry.jsonl
+      data/raw/amazon_digital_music.jsonl
+      data/raw/amazon_electronics.jsonl
+      data/raw/amazon_gift_cards.jsonl
+      data/raw/amazon_grocery_and_gourmet_food.jsonl
+      data/raw/amazon_handmade_products.jsonl
+      data/raw/amazon_health_and_household.jsonl
+      data/raw/amazon_health_and_personal_care.jsonl
+      data/raw/amazon_home_and_kitchen.jsonl
+      data/raw/amazon_industrial_and_scientific.jsonl
+      data/raw/amazon_kindle_store.jsonl
+      data/raw/amazon_magazine_subscriptions.jsonl
+      data/raw/amazon_movies_and_tv.jsonl
+      data/raw/amazon_musical_instruments.jsonl
+      data/raw/amazon_office_products.jsonl
+      data/raw/amazon_patio_lawn_and_garden.jsonl
+      data/raw/amazon_pet_supplies.jsonl
+      data/raw/amazon_software.jsonl
+      data/raw/amazon_sports_and_outdoors.jsonl
+      data/raw/amazon_subscription_boxes.jsonl
+      data/raw/amazon_tools_and_home_improvement.jsonl
+      data/raw/amazon_toys_and_games.jsonl
+      data/raw/amazon_video_games.jsonl
+      --output-dir data/processed/temporal_bundle
+      --campaign-scenario-count 816216
+      --seed 42
+    deps:
+      - data/raw/amazon_all_beauty.jsonl
+      - data/raw/amazon_amazon_fashion.jsonl
+      - data/raw/amazon_appliances.jsonl
+      - data/raw/amazon_arts_crafts_and_sewing.jsonl
+      - data/raw/amazon_automotive.jsonl
+      - data/raw/amazon_baby_products.jsonl
+      - data/raw/amazon_beauty_and_personal_care.jsonl
+      - data/raw/amazon_books.jsonl
+      - data/raw/amazon_cds_and_vinyl.jsonl
+      - data/raw/amazon_cell_phones_and_accessories.jsonl
+      - data/raw/amazon_clothing_shoes_and_jewelry.jsonl
+      - data/raw/amazon_digital_music.jsonl
+      - data/raw/amazon_electronics.jsonl
+      - data/raw/amazon_gift_cards.jsonl
+      - data/raw/amazon_grocery_and_gourmet_food.jsonl
+      - data/raw/amazon_handmade_products.jsonl
+      - data/raw/amazon_health_and_household.jsonl
+      - data/raw/amazon_health_and_personal_care.jsonl
+      - data/raw/amazon_home_and_kitchen.jsonl
+      - data/raw/amazon_industrial_and_scientific.jsonl
+      - data/raw/amazon_kindle_store.jsonl
+      - data/raw/amazon_magazine_subscriptions.jsonl
+      - data/raw/amazon_movies_and_tv.jsonl
+      - data/raw/amazon_musical_instruments.jsonl
+      - data/raw/amazon_office_products.jsonl
+      - data/raw/amazon_patio_lawn_and_garden.jsonl
+      - data/raw/amazon_pet_supplies.jsonl
+      - data/raw/amazon_software.jsonl
+      - data/raw/amazon_sports_and_outdoors.jsonl
+      - data/raw/amazon_subscription_boxes.jsonl
+      - data/raw/amazon_tools_and_home_improvement.jsonl
+      - data/raw/amazon_toys_and_games.jsonl
+      - data/raw/amazon_video_games.jsonl
+      - src/bot_campaign/cli.py
+      - src/bot_campaign/data.py
+      - src/bot_campaign/dataset_bundle.py
+      - src/bot_campaign/temporal.py
+    outs:
+      - data/processed/temporal_bundle
+
+  build_dataset_bundle:
+    cmd: >-
+      python -m bot_campaign.cli build-dataset-bundle
+      --labeled-input data/raw/product_reviews.jsonl data/raw/kaggle_fake_reviews
+      --behavioral-input
+      data/raw/amazon_all_beauty.jsonl
+      data/raw/amazon_amazon_fashion.jsonl
+      data/raw/amazon_appliances.jsonl
+      data/raw/amazon_arts_crafts_and_sewing.jsonl
+      data/raw/amazon_automotive.jsonl
+      data/raw/amazon_baby_products.jsonl
+      data/raw/amazon_beauty_and_personal_care.jsonl
+      data/raw/amazon_books.jsonl
+      data/raw/amazon_cds_and_vinyl.jsonl
+      data/raw/amazon_cell_phones_and_accessories.jsonl
+      data/raw/amazon_clothing_shoes_and_jewelry.jsonl
+      data/raw/amazon_digital_music.jsonl
+      data/raw/amazon_electronics.jsonl
+      data/raw/amazon_gift_cards.jsonl
+      data/raw/amazon_grocery_and_gourmet_food.jsonl
+      data/raw/amazon_handmade_products.jsonl
+      data/raw/amazon_health_and_household.jsonl
+      data/raw/amazon_health_and_personal_care.jsonl
+      data/raw/amazon_home_and_kitchen.jsonl
+      data/raw/amazon_industrial_and_scientific.jsonl
+      data/raw/amazon_kindle_store.jsonl
+      data/raw/amazon_magazine_subscriptions.jsonl
+      data/raw/amazon_movies_and_tv.jsonl
+      data/raw/amazon_musical_instruments.jsonl
+      data/raw/amazon_office_products.jsonl
+      data/raw/amazon_patio_lawn_and_garden.jsonl
+      data/raw/amazon_pet_supplies.jsonl
+      data/raw/amazon_software.jsonl
+      data/raw/amazon_sports_and_outdoors.jsonl
+      data/raw/amazon_subscription_boxes.jsonl
+      data/raw/amazon_tools_and_home_improvement.jsonl
+      data/raw/amazon_toys_and_games.jsonl
+      data/raw/amazon_video_games.jsonl
+      --output-dir data/processed/dataset_bundle
+      --augmentation-count 7000
+      --campaign-scenario-count 816216
+      --max-synthetic-fraction 0.25
+      --seed 42
+    deps:
+      - data/raw/product_reviews.jsonl
+      - data/raw/kaggle_fake_reviews/fake reviews dataset.csv
+      - data/raw/amazon_all_beauty.jsonl
+      - data/raw/amazon_amazon_fashion.jsonl
+      - data/raw/amazon_appliances.jsonl
+      - data/raw/amazon_arts_crafts_and_sewing.jsonl
+      - data/raw/amazon_automotive.jsonl
+      - data/raw/amazon_baby_products.jsonl
+      - data/raw/amazon_beauty_and_personal_care.jsonl
+      - data/raw/amazon_books.jsonl
+      - data/raw/amazon_cds_and_vinyl.jsonl
+      - data/raw/amazon_cell_phones_and_accessories.jsonl
+      - data/raw/amazon_clothing_shoes_and_jewelry.jsonl
+      - data/raw/amazon_digital_music.jsonl
+      - data/raw/amazon_electronics.jsonl
+      - data/raw/amazon_gift_cards.jsonl
+      - data/raw/amazon_grocery_and_gourmet_food.jsonl
+      - data/raw/amazon_handmade_products.jsonl
+      - data/raw/amazon_health_and_household.jsonl
+      - data/raw/amazon_health_and_personal_care.jsonl
+      - data/raw/amazon_home_and_kitchen.jsonl
+      - data/raw/amazon_industrial_and_scientific.jsonl
+      - data/raw/amazon_kindle_store.jsonl
+      - data/raw/amazon_magazine_subscriptions.jsonl
+      - data/raw/amazon_movies_and_tv.jsonl
+      - data/raw/amazon_musical_instruments.jsonl
+      - data/raw/amazon_office_products.jsonl
+      - data/raw/amazon_patio_lawn_and_garden.jsonl
+      - data/raw/amazon_pet_supplies.jsonl
+      - data/raw/amazon_software.jsonl
+      - data/raw/amazon_sports_and_outdoors.jsonl
+      - data/raw/amazon_subscription_boxes.jsonl
+      - data/raw/amazon_tools_and_home_improvement.jsonl
+      - data/raw/amazon_toys_and_games.jsonl
+      - data/raw/amazon_video_games.jsonl
+      - src/bot_campaign/data.py
+      - src/bot_campaign/dataset_bundle.py
+      - src/bot_campaign/labeled_datasets.py
+      - src/bot_campaign/synthetic.py
+      - src/bot_campaign/temporal.py
+    outs:
+      - data/processed/dataset_bundle
+
+  train_product_model:
+    cmd: >-
+      python -m bot_campaign.cli train
+      --data data/processed/dataset_bundle/text/training.jsonl
+      --test-data data/processed/dataset_bundle/text/real/test.jsonl
+      --baseline-data data/processed/dataset_bundle/text/real/train.jsonl
+      --min-pr-auc-lift 0.05
+    deps:
+      - data/processed/dataset_bundle/text/training.jsonl
+      - data/processed/dataset_bundle/text/real/test.jsonl
+      - data/processed/dataset_bundle/text/real/train.jsonl
+      - src/bot_campaign/model.py
+    outs:
+      - artifacts/review_model.joblib
+      - reports/generated/baseline_metrics.json

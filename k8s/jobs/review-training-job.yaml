@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: detectra-review-training
+  labels:
+    app.kubernetes.io/name: detectra-review-training
+    app.kubernetes.io/component: training-submitter
+    app.kubernetes.io/part-of: detectra
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 604800
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: detectra-review-training
+        app.kubernetes.io/component: training-submitter
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 100
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: submit
+          image: detectra-jobs
+          imagePullPolicy: IfNotPresent
+          command: [bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              import time
+              import urllib.request
+              for attempt in range(60):
+                  try:
+                      urllib.request.urlopen("http://detectra-ray:8265/api/version", timeout=3)
+                      break
+                  except Exception:
+                      if attempt == 59:
+                          raise
+                      time.sleep(5)
+              PY
+              ray job submit --address=http://detectra-ray:8265 -- \
+                python /opt/project/training/ray_review_train.py \
+                --ray-address auto \
+                --mlflow-uri http://detectra-mlflow:5000 \
+                --train-data /opt/project/data/processed/dataset_bundle/text/training.jsonl \
+                --validation-data /opt/project/data/processed/dataset_bundle/text/real/validation.jsonl \
+                --test-data /opt/project/data/processed/dataset_bundle/text/real/test.jsonl \
+                --output /opt/project/artifacts/review_distilbert \
+                --ray-storage-path /opt/project/artifacts/ray_results \
+                --num-samples "${RAY_NUM_SAMPLES:-20}" \
+                --epochs "${RAY_EPOCHS:-3}" \
+                --gpus-per-trial "${RAY_GPUS_PER_TRIAL:-0}" \
+                --max-concurrent-trials "${RAY_MAX_CONCURRENT_TRIALS:-1}"
+          envFrom:
+            - configMapRef:
+                name: detectra-config
+          env:
+            - name: RAY_NUM_SAMPLES
+              value: "20"
+            - name: RAY_EPOCHS
+              value: "3"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Ecommerce review trust and campaign detection demo">
+  <title>Detectra | Review Intelligence</title>
+  <link rel="stylesheet" href="/styles.css?v=20260820-release">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#scanner">DETECTRA <span>TRUST</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#scanner">Product &amp; Reviews</a>
+      <a href="#campaigns">Live Campaigns</a>
+      <a href="#deployment">Deployment</a>
+      <a href="#monitoring">Monitoring</a>
+      <a href="#versions">Versions</a>
+      <a href="#workflow">How it works</a>
+    </nav>
+    <span id="api-status" class="health-pill pending">API checking</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">ECOMMERCE TRUST INTELLIGENCE</p>
+        <h1>See how every review is scanned.</h1>
+        <p class="lede">Inspect language, behavior, timing, similarity, campaign context, and the exact model lineage behind every result.</p>
+      </div>
+      <div class="hero-metrics" aria-label="Live summary">
+        <div><strong id="hero-scans">0</strong><span>reviews scanned</span></div>
+        <div><strong id="hero-campaigns">0</strong><span>campaigns found</span></div>
+        <div><strong id="hero-latency">0 ms</strong><span>p95 latency</span></div>
+      </div>
+    </section>
+
+    <section id="scanner" class="section scanner-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">01 / REVIEW SCANNER</p><h2>Scan a review</h2></div>
+        <p>Risk signals support moderation. They are evidence, not proof of deception.</p>
+      </div>
+      <div class="scanner-grid">
+        <form id="review-form" class="panel review-form">
+          <div class="form-kicker"><span>INFERENCE WORKSPACE</span><span id="review-char-count">0 / 20,000</span></div>
+          <label for="example">Load an example</label>
+          <select id="example">
+            <option value="genuine">Likely genuine review</option>
+            <option value="promotional">Obvious promotional review</option>
+            <option value="ai">Subtle AI-generated review</option>
+            <option value="positive-campaign">Coordinated positive campaign</option>
+            <option value="negative-campaign">Coordinated negative campaign</option>
+            <option value="cross-product-campaign">Cross-product campaign</option>
+            <option value="legitimate-burst">Legitimate sale-burst example</option>
+          </select>
+          <label for="review-text">Review text <span class="label-hint">Natural language evidence</span></label>
+          <textarea id="review-text" required minlength="3" maxlength="20000"></textarea>
+          <div class="fields three">
+            <label>Product ID<input id="product-id" value="quietform-studio" maxlength="200"></label>
+            <label>User ID<input id="user-id" value="demo-customer" maxlength="200"></label>
+            <label>Language<input id="language" value="en" maxlength="20"></label>
+          </div>
+          <div class="fields four">
+            <label>Rating<select id="rating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label>
+            <label>Helpful votes<input id="helpful" type="number" value="0" min="0"></label>
+            <label>Timestamp<input id="timestamp" type="datetime-local"></label>
+            <label class="check"><input id="verified" type="checkbox"> Verified purchase</label>
+          </div>
+          <div class="button-row">
+            <button class="primary" type="submit">Scan review</button>
+            <button class="secondary" id="replay" type="button">Replay campaign</button>
+          </div>
+        </form>
+
+        <div class="panel scan-progress" aria-live="polite">
+          <div class="panel-title"><span>Live scan</span><span id="scan-time">READY</span></div>
+          <ol id="scan-steps">
+            <li>Validate input</li><li>Analyze language</li><li>Create NLP embedding</li>
+            <li>Load behavioral features</li><li>Search recent similar reviews</li>
+            <li>Calculate individual risk</li><li>Check campaign membership</li>
+            <li>Return evidence and versions</li>
+          </ol>
+        </div>
+
+        <aside id="result" class="panel result" aria-live="polite">
+          <div class="result-placeholder"><span class="status neutral">READY</span><h3>Trust analysis</h3><p>Choose an example or enter a review, then start the scan.</p></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="review-feed" class="section">
+      <div class="section-heading">
+        <div><p class="eyebrow">02 / AUDIT FEED</p><h2>Recently scanned</h2></div>
+        <label>Filter feed
+          <select id="feed-filter"><option value="all">All reviews</option><option value="needs">Needs review</option><option value="campaign">Campaign-associated</option><option value="verified">Verified</option><option value="unverified">Unverified</option><option value="positive">Positive rating</option><option value="negative">Negative rating</option></select>
+        </label>
+      </div>
+      <div id="review-list" class="card-grid"><p class="empty">No reviews scanned in this process yet.</p></div>
+    </section>
+
+    <section id="campaigns" class="section dark-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">03 / LIVE CAMPAIGNS</p><h2>Coordination evidence</h2></div>
+        <p>Only confirmed campaign evidence can activate a temporary, reversible soft limit.</p>
+      </div>
+      <div id="campaign-list" class="campaign-list"><p class="empty">Replay a campaign to populate this console.</p></div>
+    </section>
+
+    <section id="deployment" class="section">
+      <div class="section-heading"><div><p class="eyebrow">04 / DEPLOYMENT</p><h2>What is running</h2></div><p>Read-only service health and release identity.</p></div>
+      <div class="architecture" aria-label="Deployment flow">
+        <div>Browser</div><span>→</span><div>FastAPI<br><small>TensorRT ready</small></div><span>→</span><div>Kafka</div><span>→</span><div>Spark</div><span>→</span><div>Campaign detector</div>
+      </div>
+      <div id="service-grid" class="service-grid"><p class="empty">Loading service status…</p></div>
+      <div id="ops-links" class="external-links"></div>
+    </section>
+
+    <section id="monitoring" class="section accent-section">
+      <div class="section-heading"><div><p class="eyebrow">05 / MONITORING</p><h2>Live signals</h2></div><p id="monitor-updated">Waiting for metrics…</p></div>
+      <div id="metric-grid" class="metric-grid"></div>
+      <div class="bar-panels">
+        <div class="panel"><h3>Latency budget</h3><div id="latency-bars"></div></div>
+        <div class="panel"><h3>Drift signals</h3><div id="drift-bars"></div></div>
+      </div>
+    </section>
+
+    <section id="versions" class="section">
+      <div class="section-heading"><div><p class="eyebrow">06 / VERSION LINEAGE</p><h2>Trace every decision</h2></div><p>Code, data, model, schema, image, and deployment are recorded together.</p></div>
+      <div class="table-wrap"><table><thead><tr><th>Version type</th><th>Current value</th></tr></thead><tbody id="lineage-table"></tbody></table></div>
+    </section>
+
+    <section id="workflow" class="section workflow">
+      <div class="section-heading">
+        <div><p class="eyebrow">07 / SHIP IT</p><h2>From clone to a live trust stack</h2></div>
+        <p>Choose a lightweight local demo or the complete Kubernetes platform. Every
+          project image is published with the same immutable Git commit tag.</p>
+      </div>
+      <ol class="onboard-flow" aria-label="Developer release flow">
+        <li><span class="step-number">01</span><div class="step-copy"><strong>Clone + install</strong><span>Python 3.11 or 3.12, Git, DVC, and Docker Desktop</span></div></li>
+        <li><span class="step-number">02</span><div class="step-copy"><strong>Restore versions</strong><span>DVC restores data; Git LFS restores promoted model artifacts</span></div></li>
+        <li><span class="step-number">03</span><div class="step-copy"><strong>Launch a profile</strong><span>Core, observable, or full Airflow stack—without duplicate services</span></div></li>
+        <li><span class="step-number">04</span><div class="step-copy"><strong>Replay traffic</strong><span>Kafka carries reviews while Spark creates event-time windows</span></div></li>
+        <li><span class="step-number">05</span><div class="step-copy"><strong>Inspect evidence</strong><span>FastAPI and the UI keep review risk separate from campaign risk</span></div></li>
+        <li><span class="step-number">06</span><div class="step-copy"><strong>Observe + improve</strong><span>Grafana metrics, Kibana logs, MLflow lineage, and safe retraining</span></div></li>
+      </ol>
+
+      <div class="launch-grid">
+        <article class="launch-card local-launch">
+          <div class="launch-card-head"><span class="launch-icon" aria-hidden="true">⌁</span><div><p class="card-kicker">LOCAL DEMO</p><h3>Start the trained workspace</h3></div></div>
+          <p>Best for development and a live classroom demonstration. Training remains optional.</p>
+          <pre class="command-block"><code>.\scripts\start_detectra.ps1 -Observability -Build
+.\scripts\start_airflow.ps1</code></pre>
+          <div class="profile-chips" aria-label="Local services"><span>API + UI</span><span>Kafka + Spark</span><span>MLflow</span><span>Grafana</span><span>Kibana</span><span>Airflow</span></div>
+        </article>
+        <article class="launch-card cluster-launch">
+          <div class="launch-card-head"><span class="launch-icon" aria-hidden="true">◇</span><div><p class="card-kicker">KUBERNETES</p><h3>Deploy one immutable release</h3></div></div>
+          <p>The full profile includes Elastic, Kibana, Filebeat, and Airflow. Use the Git SHA created by the release workflow.</p>
+          <pre class="command-block"><code>.\scripts\deploy_kubernetes.ps1 `
+  -ImageTag &lt;git-sha&gt; -Full
+
+# add -Gpu for NVIDIA training</code></pre>
+          <div class="profile-chips" aria-label="Kubernetes profiles"><span>Core</span><span>Observability</span><span>Full</span><span>Full GPU</span></div>
+        </article>
+      </div>
+
+      <div class="release-details">
+        <article class="registry-panel">
+          <p class="card-kicker">GHCR RELEASE REGISTRY</p>
+          <h3>Three images. One Git SHA.</h3>
+          <div class="registry-list">
+            <a href="https://github.com/njchathura-boop/Bot-Review-Campaign/pkgs/container/bot-review-campaign-api" target="_blank" rel="noopener"><span>API / UI / inference</span><code>bot-review-campaign-api:&lt;sha&gt;</code></a>
+            <a href="https://github.com/njchathura-boop/Bot-Review-Campaign/pkgs/container/bot-review-campaign-jobs" target="_blank" rel="noopener"><span>ETL / Ray training</span><code>bot-review-campaign-jobs:&lt;sha&gt;</code></a>
+            <a href="https://github.com/njchathura-boop/Bot-Review-Campaign/pkgs/container/bot-review-campaign-airflow" target="_blank" rel="noopener"><span>Airflow + project DAGs</span><code>bot-review-campaign-airflow:&lt;sha&gt;</code></a>
+          </div>
+        </article>
+
+        <article class="service-directory">
+          <p class="card-kicker">OPEN THE STACK</p>
+          <h3>Service directory</h3>
+          <div class="service-links">
+            <a href="http://localhost:8000" target="_blank" rel="noopener"><strong>8000</strong><span>Detectra</span></a>
+            <a href="http://localhost:8084" target="_blank" rel="noopener"><strong>8084</strong><span>Airflow</span></a>
+            <a href="http://localhost:8265" target="_blank" rel="noopener"><strong>8265</strong><span>Ray</span></a>
+            <a href="http://localhost:5001" target="_blank" rel="noopener"><strong>5001</strong><span>MLflow</span></a>
+            <a href="http://localhost:9090" target="_blank" rel="noopener"><strong>9090</strong><span>Prometheus</span></a>
+            <a href="http://localhost:3000" target="_blank" rel="noopener"><strong>3000</strong><span>Grafana</span></a>
+            <a href="http://localhost:5601" target="_blank" rel="noopener"><strong>5601</strong><span>Kibana</span></a>
+            <a href="http://localhost:9200/_cluster/health" target="_blank" rel="noopener"><strong>9200</strong><span>Elastic</span></a>
+          </div>
+        </article>
+      </div>
+
+      <div class="operator-strip">
+        <div><p class="card-kicker">VERIFY</p><code>Invoke-RestMethod http://localhost:8000/health/ready</code></div>
+        <div><p class="card-kicker">LOW DISK</p><code>docker builder prune --all --force</code><small>Build cache only; keep named volumes.</small></div>
+        <div><p class="card-kicker">FULL GUIDE</p><a href="https://github.com/njchathura-boop/Bot-Review-Campaign/blob/feature/njc/k8s/README.md" target="_blank" rel="noopener">Open the Kubernetes runbook →</a></div>
+      </div>
+    </section>
+  </main>
+  <footer>Detectra | Responsible review intelligence demo | Individual risk never auto-blocks a review.</footer>
+  <script src="/app.js"></script>
+</body>
+</html>

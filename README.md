@@ -21,7 +21,11 @@ Complete the missing team values before final submission.
 | Team ID | 28 |
 | Team members and roll numbers | Chathura N J (DA25M558), Likitha (DA25M584),Karthik(DA25M572) |
 | GitHub evaluator | `mlopslabsubmission-2026` |
-| Final report | `reports/Detectra_Report.pdf` |
+| Final report | `reports/Bot_Review_Campaign_Technical_Report_Professional.pdf` |
+
+| Team member | Roll number | Contribution |
+|---|---|---|
+| **TODO** | **TODO** | **TODO** |
 
 ### Start here
 

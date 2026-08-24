@@ -18,11 +18,14 @@ Complete the missing team values before final submission.
 | Course | DA5402W — MLOps |
 | Repository name | `DA5402W_project_28_DA25M558_DA25M584_DA25M572` |
 | Evaluation branch | `main` |
-| Team ID | **TODO: add team ID** |
-| Team members and roll numbers | **TODO: add every member** |
+| Team ID | 28 |
+| Team members and roll numbers | Chathura N J (DA25M558), Likitha (DA25M584),Karthik(DA25M572) |
 | GitHub evaluator | `mlopslabsubmission-2026` |
-| Final report | `reports/Detectra_Report.pdf` |
+| Final report | `reports/Bot_Review_Campaign_Technical_Report_Professional.pdf` |
 
+| Team member | Roll number | Contribution |
+|---|---|---|
+| **TODO** | **TODO** | **TODO** |
 
 ### Start here
 
@@ -771,7 +774,7 @@ and checkpoints.
 | [`k8s/README.md`](k8s/README.md) | Kubernetes deployment reference |
 
 Final editable report:
-[`reports/Bot_Review_Campaign_Technical_Report_Professional.docx`](reports/Bot_Review_Campaign_Technical_Report_Professional.docx).
+[`reports/Detectra_Report.docx`](reports/Bot_Review_Campaign_Technical_Report_Professional.docx).
 Export it as `reports/Bot_Review_Campaign_Technical_Report_Professional.pdf` before
 submission.
 

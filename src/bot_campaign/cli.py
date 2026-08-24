@@ -4,11 +4,16 @@ import argparse
 import json
 from pathlib import Path
 
+import mlflow
+import mlflow.sklearn
+
 from .campaign import detect_campaigns
 from .data import load_review_events, load_text_labels
 from .model import save_bundle, train, train_with_holdout
-import mlflow
-import mlflow.sklearn
+
+SKOPS_TRUSTED_TYPES = ["bot_campaign.features.text_metadata"]
+
+
 def _log_numeric_metrics(metrics: dict) -> None:
     """Log only scalar numeric metrics to MLflow."""
     for key, value in metrics.items():
@@ -200,6 +205,7 @@ def main() -> None:
                     mlflow.sklearn.log_model(
                         candidate_bundle["pipeline"],
                         name="model",
+                        skops_trusted_types=SKOPS_TRUSTED_TYPES,
                     )
 
                 bundle = candidate_bundle
@@ -248,6 +254,7 @@ def main() -> None:
                         mlflow.sklearn.log_model(
                             baseline_bundle["pipeline"],
                             name="model",
+                            skops_trusted_types=SKOPS_TRUSTED_TYPES,
                         )
 
                     # ------------------------------------------------
@@ -354,6 +361,7 @@ def main() -> None:
                     mlflow.sklearn.log_model(
                         bundle["pipeline"],
                         name="model",
+                        skops_trusted_types=SKOPS_TRUSTED_TYPES,
                     )
 
             # --------------------------------------------------------

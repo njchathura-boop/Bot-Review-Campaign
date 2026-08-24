@@ -54,13 +54,17 @@ jobs:
           cache: pip
       - name: Install CPU PyTorch for model-backed tests
         run: python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.4,<3"
-      - run: python -m pip install -e ".[dev,ui,nlp]"
+      # The baseline CLI logs its parameters, metrics, and selected bundle to
+      # MLflow, so CI must install the declared MLOps dependency group too.
+      - run: python -m pip install -e ".[dev,ui,nlp,mlops]"
       - run: python -m playwright install --with-deps chromium
-      - run: >-
+      - name: Smoke-test baseline training with a local MLflow store
+        run: >-
           python -m bot_campaign.cli train
           --data data/sample/labeled_reviews.jsonl
           --test-data ""
           --baseline-data ""
+          --mlflow-uri sqlite:///mlflow-ci.db
       - name: Validate orchestration DAG source
         run: python -m compileall -q orchestration/dags
       - run: ruff check src tests training streaming spark scripts

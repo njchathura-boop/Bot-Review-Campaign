@@ -149,6 +149,10 @@ jobs:
   deploy-staging:
     name: Deploy staging and smoke test
     needs: publish
+    # Image publication is useful even when no Kubernetes staging cluster is
+    # connected. Enable this job explicitly with the repository Actions
+    # variable ENABLE_STAGING_DEPLOY=true after KUBE_CONFIG_DATA is configured.
+    if: ${{ vars.ENABLE_STAGING_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
     environment: staging
     steps:
